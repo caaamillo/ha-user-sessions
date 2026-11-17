@@ -77,11 +77,12 @@ Everything is in the UI: **Settings → Devices & services → User Sessions →
 | | Only failed sign-ins at or above | Low (everything) |
 | | Open when tapped | — |
 | Sidebar panel & card | Show User Sessions in the sidebar | Off |
+| | Sidebar panel theme | Each person's own theme |
 | | Load the User Sessions card | Off |
 
 ## Sidebar panel (optional)
 
-Turn on **Configure → Sidebar panel & dashboard card → Show User Sessions in the sidebar**. A **User Sessions** entry appears in the sidebar for admins: every overview tile, failed sign-ins (Active / History) and sign-ins by person with sign-out, on one page that works on phones too. It ships with the integration, so it updates with it; there's no dashboard to create or maintain.
+Turn on **Configure → Sidebar panel & dashboard card → Show User Sessions in the sidebar**. A **User Sessions** entry appears in the sidebar for admins: every overview tile, failed sign-ins (Active / History) and sign-ins by person with sign-out, on one page that works on phones too. It ships with the integration, so it updates with it; there's no dashboard to create or maintain. Pick any installed theme for it under *Sidebar panel theme* (used for this page only, like a dashboard view's theme). The sign-ins section has search, a person picker and *where* / *type* filters; your labelled known networks become the *where* filters automatically.
 
 <img src="docs/images/panel.png" alt="User Sessions sidebar panel with overview tiles, failed sign-ins and sign-ins by person (demo data)" width="100%">
 
@@ -107,7 +108,13 @@ tiles:                   # summary view only; omit for the first five
   - newest               # optional: newest sign-in (who, how, where)
   - last_activity        # optional: who used Home Assistant last
   - ip_ban               # optional: Home Assistant's IP-ban status
+filters: true            # sessions view: search, person picker, where / type chips
+show_tokens: true        # sessions view: list long-lived tokens too
+where: Home network      # sessions view: start filtered (any known-network label, Internet, Tailscale…)
+type: browser            # sessions view: start filtered (browser | app | connector | token)
 ```
+
+*Connector* means another service that signed in to Home Assistant through its sign-in page, such as an AI assistant's MCP connector.
 
 | `view: failed` — Active / History, tap a row for details | `view: summary` and `view: sessions` |
 |---|---|

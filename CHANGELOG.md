@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0
+- Sidebar panel: pick any installed theme for it (Configure → Sidebar panel theme)
+- Card / panel: sign-ins can show search, a person picker and *where* / *type* filter chips with counts (`filters: true`), list long-lived tokens (`show_tokens: true`) and start pre-filtered (`where:`, `type:`). Where filters come from your own labelled known networks. All in the visual editor
+- Sign-ins now carry `client_type` (browser, app, connector, token)
+- Card: fills follow any theme (tiles were invisible on themes with translucent cards)
+
 ## 0.8.0
 - Optional **sidebar panel** (admins only): Configure → Sidebar panel & dashboard card → Show User Sessions in the sidebar. Overview with every tile, failed sign-ins and sign-ins by person on one page; works on phones
 - Card: badges wrap instead of being cut off on narrow screens; tile titles wrap
