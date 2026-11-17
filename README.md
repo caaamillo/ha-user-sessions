@@ -2,7 +2,7 @@
 
 # User Sessions for Home Assistant
 
-See **every** user's sign-ins and long-lived tokens in one place, get alerted about new and **failed** sign-ins (with location, device and risk), and sign anyone out — from automations, notifications or your dashboard.
+See **every** user's sign-ins and long-lived tokens in one place, get alerted about new and **failed** sign-ins (with location, device, MAC address and risk), get told exactly what to block when Home Assistant bans an IP, and sign anyone out — from automations, notifications or your dashboard.
 
 Home Assistant only shows each user their *own* sessions (Profile → Security). This integration runs inside HA, so it can list everyone's.
 
