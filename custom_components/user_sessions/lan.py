@@ -111,9 +111,15 @@ async def async_lookup(hass: HomeAssistant, ip: str) -> dict[str, Any] | None:
 
     ha_device = None
     try:
-        dev = dr.async_get(hass).async_get_device(connections={(dr.CONNECTION_NETWORK_MAC, mac)})
-        if dev is not None:
-            ha_device = dev.name_by_user or dev.name
+        reg = dr.async_get(hass)
+        conn = (dr.CONNECTION_NETWORK_MAC, mac)
+        if (by_conn := getattr(reg, "async_get_device_by_connection", None)) is not None:  # HA 2026.11+
+            found = by_conn(conn)
+            devs = list(found) if isinstance(found, (list, tuple, set)) else [found] if found else []
+        else:
+            devs = [d] if (d := reg.async_get_device(connections={conn})) else []
+        if devs:
+            ha_device = devs[0].name_by_user or devs[0].name
             name = name or ha_device
     except Exception:  # noqa: BLE001
         pass
