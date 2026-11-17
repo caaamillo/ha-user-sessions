@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.1
+- First release validated by the full HACS action now the repository is public; no functional changes
+
 ## 0.6.0
 - MAC address, device name and maker for failed sign-ins from your own network (ARP table, any router integration's device trackers, device registry; vendor via the IEEE OUI list)
 - Learns which MACs have signed in successfully, so a known device is flagged
