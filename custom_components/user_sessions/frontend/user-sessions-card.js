@@ -89,7 +89,7 @@
             ${e.distance_km != null ? `<span>From home</span><span>${Math.round(e.distance_km).toLocaleString()} km</span>` : ''}
             ${(e.urls || []).length ? `<span>Requested</span><code>${esc(e.urls.join(', '))}</code>` : ''}
             ${(e.user_agents || []).length ? `<span>User agent</span><code>${esc(e.user_agents[0])}</code>` : ''}
-            <span>HA IP ban</span><span>${e.banned ? 'Banned' : e.ha_ip_ban_enabled ? 'Bans after ' + esc(e.ha_ban_threshold) + ' failures' : 'Off'}</span>
+            <span>HA IP ban</span><span>${e.banned ? 'Banned' : e.ha_ip_ban_enabled && e.ha_ban_threshold ? 'Bans after ' + esc(e.ha_ban_threshold) + ' failures' : 'Off · <a href="/config/network">turn on</a>'}</span>
             ${tab === 'history' ? `<span>Cleared</span><span>${e.cleared_reason === 'auto_archived' ? 'Auto-archived' : 'By ' + esc(e.cleared_by || '?')} · ${ago(e.cleared_at)}</span>` : ''}
           </div>${e.banned && (e.block_advice || []).length ? `<div class="advice"><b>Block it on your network</b><ul>${e.block_advice.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div>` : ''}${(e.risk_reasons || []).length ? `<div class="chips">${e.risk_reasons.map(r => `<span>${esc(r)}</span>`).join('')}</div>` : ''}
           <div class="btns">${e.known_ip ? '' : `<button class="btn" data-trust="${esc(e.ip)}">${this._armed === 'trust:' + e.ip ? 'Tap again to trust' : 'It was me · trust IP'}</button>`}${tab === 'active' ? `<button class="btn" data-clear1="${esc(e.id)}">Move to history</button>` : ''}</div></div>`;

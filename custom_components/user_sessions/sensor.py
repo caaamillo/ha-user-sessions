@@ -12,7 +12,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import SessionsCoordinator, get_options
 from .const import CONF_HISTORY_DAYS, CONF_HISTORY_MAX, CONF_TRACK_FAILED, DOMAIN
-from .security import SecurityManager
+from .security import SecurityManager, ha_ban_config
 
 _TOKEN_KEYS = ("session_id", "client_name", "created", "last_used", "last_ip")
 HISTORY_ATTR_LIMIT = 50  # keep state attributes small; the full history lives in .storage
@@ -204,6 +204,8 @@ class FailedSignInsSensor(_SecurityEntity):
             "tracking_enabled": get_options(self.entry)[CONF_TRACK_FAILED],
             "total_attempts": sum(e.get("attempts", 1) for e in active),
             "banned": sum(1 for e in active if e.get("banned")),
+            "ha_ip_ban_enabled": (ban := ha_ban_config(self.hass))["enabled"],
+            "ha_ban_threshold": ban["threshold"],
             "highest_risk": next((lvl for lvl in ("high", "medium", "low") if any(e.get("risk") == lvl for e in active)), None),
             "last_ip": latest.get("ip"),
             "last_location": latest.get("location"),

@@ -14,7 +14,7 @@
     "step": {
       "init": {
         "title": "User Sessions options",
-        "description": "Which networks and IPs count as yours, how failed sign-ins are captured, and how long cleared entries are kept.",
+        "description": "Which networks and IPs count as yours, how failed sign-ins are captured, and how long cleared entries are kept.\n\n**Home Assistant IP banning:** {ban_status}. Banning is a Home Assistant setting, not part of this integration: change it under [Settings → System → Network → HTTP server](/config/network).",
         "sections": {
           "networks": {
             "name": "Known networks & IPs",
@@ -77,6 +77,12 @@
     "error": {
       "invalid_network": "Not a valid network: {bad}. Use CIDR like 192.168.1.0/24, optionally followed by a label.",
       "invalid_ip": "Not a valid IP: {bad}. Use an address like 203.0.113.7, optionally followed by a label."
+    }
+  },
+  "issues": {
+    "ip_ban_off": {
+      "title": "IP banning is off, so failed sign-ins are never blocked",
+      "description": "User Sessions records every failed sign-in, but Home Assistant only blocks an address after repeated failures when IP banning is on and has a limit.\n\n**To turn it on:** go to **Settings → System → Network**, open **HTTP server**, turn on **Enable IP banning**, turn off **Unlimited login attempts** and set **Login attempts before ban** (3 to 5 is typical). Saving restarts Home Assistant; confirm the new settings when asked. On versions without this screen, add `ip_ban_enabled: true` and `login_attempts_threshold: 5` under `http:` in configuration.yaml and restart.\n\n**Behind a reverse proxy or tunnel** (NGINX, Cloudflare, Tailscale Funnel…)? Set **Trust X-Forwarded-For** and **Trusted proxies** first, or Home Assistant may ban the proxy and lock everyone out. If User Sessions shows the real visitor IPs, you're fine.\n\nTo lift a ban, delete the address from `ip_bans.yaml` in your config folder and restart. Ignore this notice if you've chosen not to use IP banning."
     }
   },
   "selector": {

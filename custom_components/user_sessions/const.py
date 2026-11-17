@@ -54,6 +54,8 @@ CONF_LOOKUP_MAC = "lookup_mac"
 CONF_NOTIFY_ON_BAN = "notify_on_ban"
 BAN_NOTIFICATION_PREFIX = "user_sessions_ban_"
 HA_BAN_NOTIFICATION_ID = "ip-ban"
+ISSUE_IP_BAN_OFF = "ip_ban_off"
+HTTP_SETTINGS_URL = "homeassistant://config/network"
 
 GEO_NONE = "none"
 GEO_IP_API = "ip_api"

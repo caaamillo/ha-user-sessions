@@ -168,6 +168,14 @@ class UserSessionsOptionsFlow(OptionsFlow):
             from . import async_default_networks  # noqa: PLC0415
 
             cur[CONF_KNOWN_NETWORKS] = await async_default_networks(self.hass, cur)
+        from .security import ha_ban_config  # noqa: PLC0415
+
+        ban = ha_ban_config(self.hass)
+        placeholders["ban_status"] = (
+            f"✅ on, after {ban['threshold']} failed sign-ins" if ban["enabled"]
+            else "⚠️ off: failed sign-ins are recorded but never blocked" if ban["known"]
+            else "unknown"
+        )
         return self.async_show_form(
             step_id="init", data_schema=_schema(cur), errors=errors, description_placeholders=placeholders
         )

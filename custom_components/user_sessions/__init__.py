@@ -30,9 +30,10 @@ from homeassistant.auth.models import (
 )
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
+from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.helpers.storage import Store
@@ -62,6 +63,8 @@ from .const import (
     DOMAIN,
     EVENT_NEW_SESSION,
     HA_LOGIN_NOTIFICATION_ID,
+    HTTP_SETTINGS_URL,
+    ISSUE_IP_BAN_OFF,
     MAINTENANCE_INTERVAL,
     PLATFORMS,
     SERVICE_CLEAR_FAILED,
@@ -73,7 +76,7 @@ from .const import (
     STORAGE_KEY,
     STORAGE_VERSION,
 )
-from .security import SecurityManager
+from .security import SecurityManager, ha_ban_config
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -295,6 +298,25 @@ class SessionsCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
         return data
 
 
+@callback
+def async_check_ip_ban(hass: HomeAssistant) -> None:
+    """Raise a Repairs notice while HA's IP ban can't ban anyone (off, or unlimited attempts)."""
+    cfg = ha_ban_config(hass)
+    if not cfg["known"] or cfg["enabled"]:
+        ir.async_delete_issue(hass, DOMAIN, ISSUE_IP_BAN_OFF)
+        return
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        ISSUE_IP_BAN_OFF,
+        is_fixable=False,
+        is_persistent=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key=ISSUE_IP_BAN_OFF,
+        learn_more_url=HTTP_SETTINGS_URL,
+    )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if entry.options.get(CONF_KNOWN_NETWORKS) is None:
         # first start (or upgrade from v0.3): seed the editable list, dropping the old toggles
@@ -317,9 +339,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await _async_card(hass, bool(options[CONF_ENABLE_CARD]))
 
     security.maintenance()
-    entry.async_on_unload(
-        async_track_time_interval(hass, lambda _now: security.maintenance(), MAINTENANCE_INTERVAL)
-    )
+    async_check_ip_ban(hass)
+
+    @callback
+    def _hourly(_now) -> None:
+        security.maintenance()
+        async_check_ip_ban(hass)
+
+    entry.async_on_unload(async_track_time_interval(hass, _hourly, MAINTENANCE_INTERVAL))
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     # ---------------------------------------------------------------- services
@@ -431,6 +458,7 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    ir.async_delete_issue(hass, DOMAIN, ISSUE_IP_BAN_OFF)
     for service in ALL_SERVICES:
         hass.services.async_remove(DOMAIN, service)
     coordinator = getattr(entry, "runtime_data", None)

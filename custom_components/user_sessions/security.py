@@ -298,6 +298,32 @@ def block_advice(entry: dict[str, Any]) -> list[str]:
     return steps
 
 
+def ha_ban_config(hass: HomeAssistant) -> dict[str, Any]:
+    """How Home Assistant's own IP ban is set up right now.
+
+    enabled   : banning is on AND has a limit (on with "unlimited login attempts" never bans)
+    threshold : failed attempts before a ban, or None
+    known     : False when HA's internals couldn't be read (never nag in that case)
+    """
+    out: dict[str, Any] = {"enabled": False, "threshold": None, "known": False}
+    try:
+        from homeassistant.components.http import ban as ban_mod  # noqa: PLC0415
+
+        app = hass.http.app
+        mgr_key = getattr(ban_mod, "KEY_BAN_MANAGER", None)
+        thr_key = getattr(ban_mod, "KEY_LOGIN_THRESHOLD", None)
+        if mgr_key is None or thr_key is None:
+            return out
+        threshold = app.get(thr_key)
+        has_mgr = app.get(mgr_key) is not None
+        out["known"] = True
+        if has_mgr and isinstance(threshold, int) and threshold >= 1:
+            out.update(enabled=True, threshold=threshold)
+    except Exception:  # noqa: BLE001 - internals may move between versions
+        pass
+    return out
+
+
 class _BanLogHandler(logging.Handler):
     """Forwards http.ban log lines to the event loop."""
 
@@ -827,14 +853,14 @@ class SecurityManager:
             app = self.hass.http.app
             key_mgr = getattr(ban_mod, "KEY_BAN_MANAGER", None)
             mgr = app.get(key_mgr) if key_mgr is not None else None
-            info["ha_ip_ban_enabled"] = mgr is not None
+            cfg = ha_ban_config(self.hass)
+            info["ha_ip_ban_enabled"] = cfg["enabled"]
+            info["ha_ban_threshold"] = cfg["threshold"]
             if mgr is not None:
                 addr = ipaddress.ip_address(ip)
                 info["banned"] = addr in getattr(mgr, "ip_bans_lookup", {})
                 if (k := getattr(ban_mod, "KEY_FAILED_LOGIN_ATTEMPTS", None)) is not None:
                     info["ha_failed_count"] = app.get(k, {}).get(addr, 0)
-                if (k := getattr(ban_mod, "KEY_LOGIN_THRESHOLD", None)) is not None:
-                    info["ha_ban_threshold"] = app.get(k)
         except Exception:  # noqa: BLE001 - internals may move between versions
             pass
         return info

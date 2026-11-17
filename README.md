@@ -149,7 +149,13 @@ actions:
 ```
 
 ## IP bans and MAC addresses
-Turn on banning under **Settings → System → Network → HTTP server** (*Enable IP banning*, then set *Login attempts before ban*). When an address is banned you get a notification titled **Sign-in ban: block this device?** with the IP, where it came from, the device and what to do. Clearing the entry dismisses it.
+IP banning is a Home Assistant setting, not part of this integration: turn it on under **Settings → System → Network → HTTP server** (*Enable IP banning*, turn off *Unlimited login attempts*, then set *Login attempts before ban*). User Sessions helps you get it right:
+- The **Configure** screen shows whether banning is on and after how many attempts, with a link to the HTTP server settings.
+- While banning is off (or set to unlimited attempts) a **Repairs** notice explains how to turn it on, including the reverse-proxy pitfall. It clears itself once banning works, or you can ignore it.
+- The card shows "Bans after N failures", or "Off · turn on".
+
+Behind a reverse proxy or tunnel, set *Trust X-Forwarded-For* and *Trusted proxies* first, or Home Assistant may ban the proxy and lock everyone out. If User Sessions shows real visitor IPs, you're fine.
+ When an address is banned you get a notification titled **Sign-in ban: block this device?** with the IP, where it came from, the device and what to do. Clearing the entry dismisses it.
 
 A MAC address only exists on the local network segment, so:
 - **Local attempts** (same LAN/VLAN as Home Assistant): the MAC is read from the ARP table, and named from any `device_tracker` that reports `mac` (UniFi, FRITZ!Box, OpenWrt, ASUSWRT, Nmap…). Block it in your router or access point's client list.

@@ -5,6 +5,9 @@
 - Learns which MACs have signed in successfully, so a known device is flagged
 - When Home Assistant's IP ban fires: a notification with steps to block the device on your own router/firewall, and a new `user_sessions_ip_banned` event. Nothing is blocked by the integration itself
 - Card: MAC / network device rows, a BANNED badge and the block steps
+- Shows Home Assistant's IP-ban status in the Configure screen with a link to the HTTP server settings, and raises a Repairs notice while banning is off or unlimited
+- `ha_ip_ban_enabled` / `ha_ban_threshold` attributes on the Failed sign-ins sensor
+- Fix: "unlimited login attempts" was reported as banning being on
 - Fix: rapid repeat attempts from one IP could create duplicate entries
 
 ## 0.5.0
