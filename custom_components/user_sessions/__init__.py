@@ -49,6 +49,9 @@ from .const import (
     ATTR_USER_ID,
     ATTR_USER_NAME,
     CARD_URL,
+    CONF_ENABLE_PANEL,
+    PANEL_PATH,
+    PANEL_URL,
     CARD_VERSION,
     CONF_DISMISS_HA_NOTIFICATION,
     CONF_ENABLE_CARD,
@@ -94,23 +97,32 @@ def get_options(entry: ConfigEntry) -> dict[str, Any]:
     return {**DEFAULTS, **(entry.options or {})}
 
 
-async def _async_card(hass: HomeAssistant, enable: bool) -> None:
-    """Serve the bundled dashboard card and load it into every open frontend (opt-in).
+async def _async_static(hass: HomeAssistant) -> None:
+    """Serve the card and panel files. Static paths can't be unregistered, so once per HA run."""
+    store = hass.data.setdefault(DOMAIN, {})
+    if store.get("static"):
+        return
+    from homeassistant.components.http import StaticPathConfig  # noqa: PLC0415
 
-    The static path can't be unregistered, so it is added once per HA run; what switches the card
-    on and off is the frontend's extra-module list, which open browsers follow live.
+    base = Path(__file__).parent / "frontend"
+    await hass.http.async_register_static_paths([
+        StaticPathConfig(CARD_URL, str(base / "user-sessions-card.js"), False),
+        StaticPathConfig(PANEL_URL, str(base / "user-sessions-panel.js"), False),
+    ])
+    store["static"] = True
+
+
+async def _async_card(hass: HomeAssistant, enable: bool) -> None:
+    """Load the bundled dashboard card into every open frontend (opt-in).
+
+    What switches the card on and off is the frontend's extra-module list, which open browsers follow live.
     """
     from homeassistant.components import frontend  # noqa: PLC0415
 
     store = hass.data.setdefault(DOMAIN, {})
     url = f"{CARD_URL}?v={CARD_VERSION}"
     if enable:
-        if not store.get("card_path"):
-            from homeassistant.components.http import StaticPathConfig  # noqa: PLC0415
-
-            path = Path(__file__).parent / "frontend" / "user-sessions-card.js"
-            await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, str(path), False)])
-            store["card_path"] = True
+        await _async_static(hass)
         if store.get("card_url") != url:
             try:
                 frontend.add_extra_js_url(hass, url)
@@ -123,6 +135,34 @@ async def _async_card(hass: HomeAssistant, enable: bool) -> None:
             frontend.remove_extra_js_url(hass, store.pop("card_url"))
         except Exception:  # noqa: BLE001
             pass
+
+
+async def _async_panel(hass: HomeAssistant, enable: bool) -> None:
+    """Add or remove the admin-only "User Sessions" sidebar panel (opt-in)."""
+    from homeassistant.components import frontend  # noqa: PLC0415
+
+    try:
+        frontend.async_remove_panel(hass, PANEL_PATH, warn_if_unknown=False)
+    except Exception:  # noqa: BLE001 - frontend not loaded
+        return
+    if not enable:
+        return
+    await _async_static(hass)
+    try:
+        from homeassistant.components import panel_custom  # noqa: PLC0415
+
+        await panel_custom.async_register_panel(
+            hass,
+            frontend_url_path=PANEL_PATH,
+            webcomponent_name="user-sessions-panel",
+            sidebar_title="User Sessions",
+            sidebar_icon="mdi:shield-account-outline",
+            module_url=f"{PANEL_URL}?v={CARD_VERSION}",
+            config={"card_url": f"{CARD_URL}?v={CARD_VERSION}"},
+            require_admin=True,
+        )
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning("Could not add the User Sessions panel: %s", err)
 
 
 async def async_default_networks(hass: HomeAssistant, options: dict[str, Any] | None = None) -> list[str]:
@@ -340,6 +380,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.async_on_unload(security.stop_capture)
 
     await _async_card(hass, bool(options[CONF_ENABLE_CARD]))
+    await _async_panel(hass, bool(options[CONF_ENABLE_PANEL]))
 
     from .notifications import Notifier  # noqa: PLC0415
 
@@ -473,4 +514,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if coordinator is not None:
         await coordinator.security.async_flush()
     await _async_card(hass, False)
+    await _async_panel(hass, False)
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

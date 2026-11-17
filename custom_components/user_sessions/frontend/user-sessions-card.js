@@ -9,7 +9,7 @@
 // Theme-aware: uses Home Assistant's own CSS variables, so it follows whatever theme you run.
 (() => {
   if (customElements.get('user-sessions-card')) return;
-  const VERSION = '0.7.0';
+  const VERSION = '0.8.0';
   const FS = 'sensor.user_sessions_failed_sign_ins', FH = 'sensor.user_sessions_failed_sign_in_history';
   const RISK = { high: 'var(--error-color, #db4437)', medium: 'var(--warning-color, #ffa600)', low: 'var(--success-color, #43a047)' };
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -176,6 +176,7 @@
   }
 
   const CSS = `
+    :host{display:block;min-width:0}
     ha-card{overflow:hidden;padding-bottom:4px}
     .head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:14px 16px 6px}
     .title{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:500;flex:1;min-width:0;color:var(--primary-text-color)}
@@ -192,6 +193,7 @@
     .ic{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--state-icon-color);background:var(--secondary-background-color);--mdc-icon-size:19px}
     .txt{flex:1;min-width:0}
     .t{font-size:14px;font-weight:500;color:var(--primary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .row .t{white-space:normal;line-height:1.6}.row.flat .t{white-space:nowrap}
     .sub{font-size:12px;color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .when{flex:none;font-size:12px;color:var(--secondary-text-color)}
     .pill{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:10.5px;font-weight:600;background:var(--secondary-background-color);color:var(--secondary-text-color);vertical-align:1px}
@@ -220,7 +222,7 @@
     .gname{display:flex;align-items:center;gap:6px;padding:10px 16px 2px;font-weight:500;color:var(--primary-text-color)}
     .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;padding:6px 16px 14px}
     .tile{min-width:0;padding:10px 12px;border-radius:12px;background:var(--secondary-background-color);--mdc-icon-size:18px;color:var(--state-icon-color)}
-    .tile .tl{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .tile .tl{display:flex;align-items:flex-start;gap:6px;font-size:12.5px;line-height:1.3;color:var(--secondary-text-color)}
     .tile .tl ha-icon{color:var(--state-icon-color);flex:none}
     .tile .big{font-size:22px;font-weight:600;color:var(--primary-text-color);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .tile .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

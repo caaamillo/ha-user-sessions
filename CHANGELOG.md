@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.0
+- Optional **sidebar panel** (admins only): Configure → Sidebar panel & dashboard card → Show User Sessions in the sidebar. Overview with every tile, failed sign-ins and sign-ins by person on one page; works on phones
+- Card: badges wrap instead of being cut off on narrow screens; tile titles wrap
+
 ## 0.7.0
 - Built-in phone notifications (opt-in): pick Companion-app phones in Configure → Phone notifications. New sign-ins (Sign it out), failed sign-ins with a minimum risk (It was me / Clear) and IP bans. Buttons only act for admins. Nothing is sent until a phone is picked
 - Card: summary tiles are now opt-in checkboxes in the visual card editor (or `tiles:` in YAML). New tiles: from the internet, over Tailscale, newest sign-in, last activity, IP-ban status; existing tiles show more detail (of N accounts, unused for 30+ days, held by N accounts, last failed attempt)

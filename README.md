@@ -30,6 +30,7 @@ Home Assistant only shows each user their *own* sessions (Profile → Security).
 - **History & retention** — clearing moves entries to a history (who cleared it and when), pruned by age and size; optional auto-archive.
 - **Known networks & IPs** — editable lists in the options form, pre-filled with your LAN (from HA's network adapters), Tailscale, and IPs that have signed in successfully. Add labels like `203.0.113.0/24 Work office`.
 - **Phone notifications (optional)** — pick your Companion-app phones in the options to get alerts for new sign-ins, failed sign-ins (with a minimum risk) and IP bans, with *It was me*, *Clear* and *Sign it out* buttons. Off until you pick a phone.
+- **Optional sidebar panel** — a **User Sessions** page in the sidebar (admins only) with the overview, failed sign-ins and everyone's sign-ins in one place. Nothing to set up on a dashboard.
 - **Optional dashboard card** — a small, theme-aware card that ships with the integration (off by default).
 - **Admin-only actions** — sign out a user, revoke one session or token, clear failed sign-ins, clear history, trust / forget an IP.
 
@@ -75,7 +76,14 @@ Everything is in the UI: **Settings → Devices & services → User Sessions →
 | | New sign-ins / Failed sign-ins / IP bans | On (once a phone is picked) |
 | | Only failed sign-ins at or above | Low (everything) |
 | | Open when tapped | — |
-| Dashboard card | Load the User Sessions card | Off |
+| Sidebar panel & card | Show User Sessions in the sidebar | Off |
+| | Load the User Sessions card | Off |
+
+## Sidebar panel (optional)
+
+Turn on **Configure → Sidebar panel & dashboard card → Show User Sessions in the sidebar**. A **User Sessions** entry appears in the sidebar for admins: every overview tile, failed sign-ins (Active / History) and sign-ins by person with sign-out, on one page that works on phones too. It ships with the integration, so it updates with it; there's no dashboard to create or maintain.
+
+<img src="docs/images/panel.png" alt="User Sessions sidebar panel with overview tiles, failed sign-ins and sign-ins by person (demo data)" width="100%">
 
 ## Dashboard card (optional)
 

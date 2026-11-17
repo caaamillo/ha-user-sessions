@@ -23,6 +23,7 @@ from .const import (
     CONF_NOTIFY_ON_BAN,
     CONF_NOTIFY_TARGETS,
     CONF_ENABLE_CARD,
+    CONF_ENABLE_PANEL,
     CONF_GEO_PROVIDER,
     CONF_HISTORY_DAYS,
     CONF_HISTORY_MAX,
@@ -54,7 +55,7 @@ SECTIONS = {
         CONF_NOTIFY_TARGETS, CONF_NOTIFY_NEW_SESSION, CONF_NOTIFY_FAILED, CONF_NOTIFY_FAILED_MIN_RISK, CONF_NOTIFY_BAN,
         CONF_NOTIFY_CLICK_URL,
     ),
-    SEC_DASHBOARD: (CONF_ENABLE_CARD,),
+    SEC_DASHBOARD: (CONF_ENABLE_PANEL, CONF_ENABLE_CARD),
 }
 INT_KEYS = (CONF_SCAN_INTERVAL, CONF_KNOWN_RADIUS_KM, CONF_HISTORY_DAYS, CONF_HISTORY_MAX, CONF_AUTO_ARCHIVE_DAYS)
 
@@ -118,8 +119,9 @@ def _schema(cur: dict[str, Any], targets: list[dict[str, str]]) -> vol.Schema:
             vol.Optional(CONF_NOTIFY_CLICK_URL, default=cur.get(CONF_NOTIFY_CLICK_URL) or ""): selector.TextSelector(),
         }), {"collapsed": not cur.get(CONF_NOTIFY_TARGETS)}),
         vol.Required(SEC_DASHBOARD): section(vol.Schema({
+            vol.Required(CONF_ENABLE_PANEL, default=cur[CONF_ENABLE_PANEL]): selector.BooleanSelector(),
             vol.Required(CONF_ENABLE_CARD, default=cur[CONF_ENABLE_CARD]): selector.BooleanSelector(),
-        }), {"collapsed": not cur[CONF_ENABLE_CARD]}),
+        }), {"collapsed": not (cur[CONF_ENABLE_CARD] or cur[CONF_ENABLE_PANEL])}),
     })
 
 

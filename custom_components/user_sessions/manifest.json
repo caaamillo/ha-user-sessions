@@ -2,7 +2,8 @@
   "domain": "user_sessions",
   "name": "User Sessions",
   "after_dependencies": [
-    "frontend"
+    "frontend",
+    "panel_custom"
   ],
   "codeowners": [
     "@caaamillo"
@@ -21,5 +22,5 @@
     "aiooui>=0.1.9"
   ],
   "single_config_entry": true,
-  "version": "0.7.0"
+  "version": "0.8.0"
 }
