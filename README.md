@@ -7,8 +7,8 @@ See **every** user's sign-ins and long-lived tokens in one place, get alerted ab
 Home Assistant only shows each user their *own* sessions (Profile → Security). This integration runs inside HA, so it can list everyone's.
 
 <p>
-  <img src="docs/images/card-failed.png" alt="Failed sign-ins card with one entry expanded" width="49%">
-  <img src="docs/images/notification.png" alt="Actionable failed sign-in notification" width="40%">
+  <img src="docs/images/overview-signins.png" alt="Sign-ins by person, colour-coded by where they come from, with bulk select, overview tiles and phone alerts" width="49%">
+  <img src="docs/images/overview-failed.png" alt="Failed sign-ins with location, MAC address, risk and what to block, plus phone alerts and IP-ban status" width="49%">
 </p>
 
 > Screenshots use made-up demo data: documentation-only IP ranges (RFC 5737) and invented names.
