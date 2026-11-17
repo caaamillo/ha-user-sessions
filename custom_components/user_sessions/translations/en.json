@@ -86,10 +86,12 @@
             "description": "A **User Sessions** page in the sidebar (admins only), and/or a small theme-aware card for your own dashboards. Add the card from the card picker as **User Sessions**, or in YAML as `type: custom:user-sessions-card` with `view: failed`, `sessions` or `summary`.",
             "data": {
               "enable_panel": "Show User Sessions in the sidebar",
+              "panel_theme": "Sidebar panel theme",
               "enable_card": "Load the User Sessions card"
             },
             "data_description": {
               "enable_panel": "One page with the overview, failed sign-ins (with history) and everyone's sign-ins, with sign-out. Only admins see it.",
+              "panel_theme": "Any theme you have installed, used for this page only (like a dashboard view's theme). Each person's own theme is used otherwise.",
               "enable_card": "Serves the card from the integration and loads it into your dashboards: no HACS frontend download or manual resource needed. Turning it off unloads it; cards already on a dashboard then show as missing."
             }
           }

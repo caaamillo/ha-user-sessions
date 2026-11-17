@@ -47,12 +47,14 @@ CONF_KNOWN_IPS = "known_ips"  # form-only: saved into the security store as trus
 TAILSCALE_RANGE = "100.64.0.0/10"
 # v0.5: optional dashboard card served by the integration itself
 CONF_ENABLE_CARD = "enable_card"
-CARD_VERSION = "0.8.0"
+CARD_VERSION = "0.9.0"
 CARD_URL = "/user_sessions/user-sessions-card.js"
 # v0.8: optional sidebar panel (admins only)
 CONF_ENABLE_PANEL = "enable_panel"
 PANEL_URL = "/user_sessions/user-sessions-panel.js"
 PANEL_PATH = "user-sessions"
+CONF_PANEL_THEME = "panel_theme"
+THEME_DEFAULT = "default"
 # v0.6: local device (MAC) lookup and a block prompt when HA bans an IP
 CONF_LOOKUP_MAC = "lookup_mac"
 CONF_NOTIFY_ON_BAN = "notify_on_ban"
@@ -88,6 +90,7 @@ DEFAULTS = {
     CONF_DISMISS_HA_NOTIFICATION: True,
     CONF_ENABLE_CARD: False,
     CONF_ENABLE_PANEL: False,
+    CONF_PANEL_THEME: THEME_DEFAULT,
     CONF_LOOKUP_MAC: True,
     CONF_NOTIFY_ON_BAN: True,
     CONF_NOTIFY_TARGETS: [],

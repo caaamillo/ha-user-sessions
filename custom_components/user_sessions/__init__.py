@@ -50,7 +50,9 @@ from .const import (
     ATTR_USER_NAME,
     CARD_URL,
     CONF_ENABLE_PANEL,
+    CONF_PANEL_THEME,
     PANEL_PATH,
+    THEME_DEFAULT,
     PANEL_URL,
     CARD_VERSION,
     CONF_DISMISS_HA_NOTIFICATION,
@@ -137,7 +139,7 @@ async def _async_card(hass: HomeAssistant, enable: bool) -> None:
             pass
 
 
-async def _async_panel(hass: HomeAssistant, enable: bool) -> None:
+async def _async_panel(hass: HomeAssistant, enable: bool, theme: str | None = None) -> None:
     """Add or remove the admin-only "User Sessions" sidebar panel (opt-in)."""
     from homeassistant.components import frontend  # noqa: PLC0415
 
@@ -158,7 +160,10 @@ async def _async_panel(hass: HomeAssistant, enable: bool) -> None:
             sidebar_title="User Sessions",
             sidebar_icon="mdi:shield-account-outline",
             module_url=f"{PANEL_URL}?v={CARD_VERSION}",
-            config={"card_url": f"{CARD_URL}?v={CARD_VERSION}"},
+            config={
+                "card_url": f"{CARD_URL}?v={CARD_VERSION}",
+                "theme": theme if theme and theme != THEME_DEFAULT else None,
+            },
             require_admin=True,
         )
     except Exception as err:  # noqa: BLE001
@@ -222,6 +227,37 @@ def _via(client_id: str | None) -> str:
     return f"Browser via {host}"
 
 
+def _ha_hosts(hass: HomeAssistant) -> set[str]:
+    """Host names Home Assistant itself is reached on (its own browser sign-ins use these)."""
+    hosts = {"homeassistant.local", "homeassistant", "localhost"}
+    for url in (hass.config.internal_url, hass.config.external_url):
+        if url and (h := urlparse(url).hostname):
+            hosts.add(h.lower())
+    return hosts
+
+
+def client_type(client_id: str | None, long_lived: bool, ha_hosts: set[str]) -> str:
+    """token | app | browser | connector (another service signed in through OAuth, e.g. an MCP client)."""
+    if long_lived:
+        return "token"
+    low = (client_id or "").lower()
+    if "home-assistant.io/ios" in low or "home-assistant.io/android" in low:
+        return "app"
+    host = (urlparse(client_id or "").hostname or "").lower()
+    if not host:
+        return "browser"
+    try:
+        import ipaddress  # noqa: PLC0415
+
+        ipaddress.ip_address(host)
+        return "browser"
+    except ValueError:
+        pass
+    if host in ha_hosts or host.endswith((".local", ".ts.net", ".ui.nabu.casa", ".duckdns.org")):
+        return "browser"
+    return "connector"
+
+
 def _token_info(token: RefreshToken) -> dict[str, Any]:
     long_lived = token.token_type == TOKEN_TYPE_LONG_LIVED_ACCESS_TOKEN
     return {
@@ -262,6 +298,7 @@ class SessionsCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
 
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:
         users = await self.hass.auth.async_get_users()
+        ha_hosts = _ha_hosts(self.hass)
         data: dict[str, dict[str, Any]] = {}
         current: set[str] = set()
         current_ll: set[str] = set()
@@ -275,6 +312,9 @@ class SessionsCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             long_lived: list[dict[str, Any]] = []
             for token in list(user.refresh_tokens.values()):
                 info = _token_info(token)
+                info["client_type"] = client_type(
+                    token.client_id, token.token_type == TOKEN_TYPE_LONG_LIVED_ACCESS_TOKEN, ha_hosts
+                )
                 if info["last_ip"]:
                     info["network"] = classify_network(info["last_ip"], [])
                     info["network_label"] = self.security.known_network_label(info["last_ip"])
@@ -380,7 +420,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.async_on_unload(security.stop_capture)
 
     await _async_card(hass, bool(options[CONF_ENABLE_CARD]))
-    await _async_panel(hass, bool(options[CONF_ENABLE_PANEL]))
+    await _async_panel(hass, bool(options[CONF_ENABLE_PANEL]), options.get(CONF_PANEL_THEME))
 
     from .notifications import Notifier  # noqa: PLC0415
 

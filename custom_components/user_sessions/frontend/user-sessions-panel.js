@@ -9,12 +9,13 @@
   class UserSessionsPanel extends HTMLElement {
     set hass(h) {
       this._h = h;
+      this._theme();
       this._build();
       (this._cards || []).forEach(c => { c.hass = h; });
       if (this._menu) this._menu.hass = h;
     }
     set narrow(n) { this._narrow = n; if (this._menu) { this._menu.narrow = n; } this._sync(); }
-    set panel(p) { this._panel = p; }
+    set panel(p) { this._panel = p; if (this._h) this._theme(); }
     set route(_r) {}
 
     async _build() {
@@ -53,9 +54,28 @@
       this._cards = [
         mk('sum', { view: 'summary', title: 'Overview', tiles: ALL_TILES }),
         mk('failed', { view: 'failed', max: 10 }),
-        mk('sessions', { view: 'sessions', title: 'Sign-ins by person' }),
+        mk('sessions', { view: 'sessions', title: 'Sign-ins by person', filters: true, show_tokens: true }),
       ];
       this._sync();
+    }
+
+    // Apply the theme picked in Configure (if any) to this page only, like a dashboard view's theme.
+    _theme() {
+      const name = this._panel && this._panel.config && this._panel.config.theme, t = this._h.themes || {};
+      const dark = !!t.darkMode, key = `${name}|${dark}|${t.themes && name && t.themes[name] ? Object.keys(t.themes[name]).length : 0}`;
+      if (key === this._themeKey) return;
+      this._themeKey = key;
+      (this._themeVars || []).forEach(k => this.style.removeProperty(k));
+      this._themeVars = [];
+      const th = name && t.themes && t.themes[name];
+      if (!th) return;
+      const vars = { ...th };
+      delete vars.modes;
+      if (th.modes) Object.assign(vars, th.modes[dark ? 'dark' : 'light'] || {});
+      Object.entries(vars).forEach(([k, v]) => {
+        if (typeof v !== 'string' && typeof v !== 'number') return;
+        this.style.setProperty('--' + k, String(v)); this._themeVars.push('--' + k);
+      });
     }
 
     _sync() {
@@ -65,7 +85,7 @@
   }
 
   const CSS = `
-    :host{display:block;min-height:100vh;background:var(--primary-background-color);color:var(--primary-text-color);font-family:var(--paper-font-body1_-_font-family, Roboto, sans-serif)}
+    :host{display:block;min-height:100vh;background:var(--lovelace-background,var(--primary-background-color));background-attachment:fixed;color:var(--primary-text-color);font-family:var(--ha-font-family-body, var(--paper-font-body1_-_font-family, Roboto, sans-serif))}
     .bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:4px;height:var(--header-height,56px);padding:0 12px;
       box-sizing:border-box;background:var(--app-header-background-color,var(--primary-color));color:var(--app-header-text-color,#fff);
       border-bottom:var(--app-header-border-bottom,none)}

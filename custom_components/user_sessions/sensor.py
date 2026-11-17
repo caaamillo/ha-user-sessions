@@ -14,7 +14,7 @@ from . import SessionsCoordinator, get_options
 from .const import CONF_HISTORY_DAYS, CONF_HISTORY_MAX, CONF_TRACK_FAILED, DOMAIN
 from .security import SecurityManager, ha_ban_config
 
-_TOKEN_KEYS = ("session_id", "client_name", "created", "last_used", "last_ip", "network", "network_label")
+_TOKEN_KEYS = ("session_id", "client_name", "created", "last_used", "last_ip", "network", "network_label", "client_type")
 HISTORY_ATTR_LIMIT = 50  # keep state attributes small; the full history lives in .storage
 
 

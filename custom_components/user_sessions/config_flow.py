@@ -24,6 +24,7 @@ from .const import (
     CONF_NOTIFY_TARGETS,
     CONF_ENABLE_CARD,
     CONF_ENABLE_PANEL,
+    CONF_PANEL_THEME,
     CONF_GEO_PROVIDER,
     CONF_HISTORY_DAYS,
     CONF_HISTORY_MAX,
@@ -36,6 +37,7 @@ from .const import (
     DOMAIN,
     GEO_PROVIDERS,
     RISK_LEVELS,
+    THEME_DEFAULT,
 )
 from .security import parse_labeled
 
@@ -55,7 +57,7 @@ SECTIONS = {
         CONF_NOTIFY_TARGETS, CONF_NOTIFY_NEW_SESSION, CONF_NOTIFY_FAILED, CONF_NOTIFY_FAILED_MIN_RISK, CONF_NOTIFY_BAN,
         CONF_NOTIFY_CLICK_URL,
     ),
-    SEC_DASHBOARD: (CONF_ENABLE_PANEL, CONF_ENABLE_CARD),
+    SEC_DASHBOARD: (CONF_ENABLE_PANEL, CONF_PANEL_THEME, CONF_ENABLE_CARD),
 }
 INT_KEYS = (CONF_SCAN_INTERVAL, CONF_KNOWN_RADIUS_KM, CONF_HISTORY_DAYS, CONF_HISTORY_MAX, CONF_AUTO_ARCHIVE_DAYS)
 
@@ -76,7 +78,7 @@ def _list(current: list[str]) -> selector.SelectSelector:
     )
 
 
-def _schema(cur: dict[str, Any], targets: list[dict[str, str]]) -> vol.Schema:
+def _schema(cur: dict[str, Any], targets: list[dict[str, str]], themes: list[str] | None = None) -> vol.Schema:
     nets, ips = list(cur.get(CONF_KNOWN_NETWORKS) or []), list(cur.get(CONF_KNOWN_IPS) or [])
     return vol.Schema({
         vol.Required(SEC_NETWORKS): section(vol.Schema({
@@ -120,6 +122,13 @@ def _schema(cur: dict[str, Any], targets: list[dict[str, str]]) -> vol.Schema:
         }), {"collapsed": not cur.get(CONF_NOTIFY_TARGETS)}),
         vol.Required(SEC_DASHBOARD): section(vol.Schema({
             vol.Required(CONF_ENABLE_PANEL, default=cur[CONF_ENABLE_PANEL]): selector.BooleanSelector(),
+            vol.Required(CONF_PANEL_THEME, default=cur.get(CONF_PANEL_THEME) or THEME_DEFAULT): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[selector.SelectOptionDict(value=THEME_DEFAULT, label="Each person's own theme")]
+                    + [selector.SelectOptionDict(value=t, label=t) for t in (themes or [])],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
             vol.Required(CONF_ENABLE_CARD, default=cur[CONF_ENABLE_CARD]): selector.BooleanSelector(),
         }), {"collapsed": not (cur[CONF_ENABLE_CARD] or cur[CONF_ENABLE_PANEL])}),
     })
@@ -203,6 +212,14 @@ class UserSessionsOptionsFlow(OptionsFlow):
         from .security import ha_ban_config  # noqa: PLC0415
 
         targets = mobile_app_targets(self.hass)
+        try:
+            from homeassistant.components.frontend import DATA_THEMES  # noqa: PLC0415
+
+            themes = sorted(self.hass.data.get(DATA_THEMES, {}), key=str.lower)
+        except Exception:  # noqa: BLE001
+            themes = []
+        if (cur.get(CONF_PANEL_THEME) or THEME_DEFAULT) not in [THEME_DEFAULT, *themes]:
+            themes.append(cur[CONF_PANEL_THEME])
         have = {t["value"] for t in targets}
         targets += [{"value": t, "label": f"{t} (not found)"} for t in (cur.get(CONF_NOTIFY_TARGETS) or []) if t not in have]
 
@@ -213,5 +230,5 @@ class UserSessionsOptionsFlow(OptionsFlow):
             else "unknown"
         )
         return self.async_show_form(
-            step_id="init", data_schema=_schema(cur, targets), errors=errors, description_placeholders=placeholders
+            step_id="init", data_schema=_schema(cur, targets, themes), errors=errors, description_placeholders=placeholders
         )
