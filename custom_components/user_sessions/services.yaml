@@ -1,0 +1,53 @@
+sign_out_user:
+  fields:
+    user_id:
+      selector:
+        text:
+    user_name:
+      example: Guest
+      selector:
+        text:
+    include_long_lived:
+      default: false
+      selector:
+        boolean:
+sign_out_session:
+  fields:
+    session_id:
+      required: true
+      selector:
+        text:
+clear_failed_sign_ins:
+  fields:
+    entry_id:
+      selector:
+        text:
+    ip:
+      example: 203.0.113.7
+      selector:
+        text:
+clear_history:
+  fields:
+    older_than_days:
+      selector:
+        number:
+          min: 0
+          max: 3650
+          unit_of_measurement: days
+          mode: box
+trust_ip:
+  fields:
+    ip:
+      required: true
+      selector:
+        text:
+    label:
+      example: Work office
+      selector:
+        text:
+forget_ip:
+  fields:
+    ip:
+      required: true
+      selector:
+        text:

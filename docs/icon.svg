@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="sh" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2196F3"/>
+      <stop offset="1" stop-color="#1259B8"/>
+    </linearGradient>
+    <linearGradient id="kb" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFC24A"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+  </defs>
+  <!-- shield -->
+  <path d="M128 10 L222 44 C222 44 226 138 196 182 C172 218 128 244 128 244 C128 244 84 218 60 182 C30 138 34 44 34 44 Z"
+        fill="url(#sh)"/>
+  <path d="M128 10 L222 44 C222 44 226 138 196 182 C172 218 128 244 128 244 Z" fill="#000" opacity="0.10"/>
+  <!-- person -->
+  <circle cx="128" cy="92" r="30" fill="#FFFFFF"/>
+  <path d="M74 178 C74 146 98 128 128 128 C158 128 182 146 182 178 C182 184 178 188 172 188 L84 188 C78 188 74 184 74 178 Z" fill="#FFFFFF"/>
+  <!-- key badge -->
+  <circle cx="196" cy="192" r="46" fill="#FFFFFF"/>
+  <circle cx="196" cy="192" r="39" fill="url(#kb)"/>
+  <g fill="#FFFFFF">
+    <circle cx="180" cy="192" r="13"/>
+    <rect x="186" y="187" width="34" height="10" rx="3"/>
+    <rect x="208" y="194" width="8" height="12" rx="2"/>
+    <rect x="198" y="194" width="7" height="9" rx="2"/>
+  </g>
+  <circle cx="180" cy="192" r="5.5" fill="#F59E0B"/>
+</svg>

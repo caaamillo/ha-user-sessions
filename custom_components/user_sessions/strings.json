@@ -1,0 +1,165 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "User Sessions",
+        "description": "Track every user's sign-ins and long-lived tokens, failed sign-in attempts, and sign users out. Options can be changed afterwards with Configure."
+      }
+    },
+    "abort": {
+      "already_configured": "User Sessions is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "User Sessions options",
+        "description": "Which networks and IPs count as yours, how failed sign-ins are captured, and how long cleared entries are kept.",
+        "sections": {
+          "networks": {
+            "name": "Known networks & IPs",
+            "description": "One entry per line: an address, then an optional label (e.g. `203.0.113.0/24 Work office`). Remove an entry with its ×; type to add a new one.",
+            "data": {
+              "known_networks": "Known networks",
+              "known_ips": "Known IPs",
+              "known_radius_km": "Known-location radius from home"
+            },
+            "data_description": {
+              "known_networks": "Address ranges (CIDR) that count as yours: sign-ins from them are 'known' and never flagged. Pre-filled with your home LAN and Tailscale.",
+              "known_ips": "Single IPs that count as yours. Pre-filled with every outside IP that has signed in successfully, plus IPs you trusted from an alert. Removing one forgets it.",
+              "known_radius_km": "A public IP that geolocates within this distance of your home zone counts as a known location."
+            }
+          },
+          "detection": {
+            "name": "Detection & alerts",
+            "data": {
+              "track_failed": "Capture failed sign-ins",
+              "geo_provider": "IP geolocation",
+              "scan_interval": "Session check interval",
+              "dismiss_ha_notification": "Also dismiss HA's 'Login attempt failed' notification when cleared"
+            },
+            "data_description": {
+              "track_failed": "Record every wrong password and every request with a bad token (from Home Assistant's own log), with IP, location, browser and device.",
+              "geo_provider": "Looks up only public IPs, never LAN or Tailscale ones. Results are cached for 7 days.",
+              "scan_interval": "Seconds between checks for new sign-ins and long-lived tokens."
+            }
+          },
+          "history": {
+            "name": "History & retention",
+            "data": {
+              "history_retention_days": "Keep history for",
+              "history_max_entries": "Maximum history entries",
+              "auto_archive_days": "Auto-move uncleared failed sign-ins to history after"
+            },
+            "data_description": {
+              "history_retention_days": "Cleared entries older than this are deleted automatically.",
+              "history_max_entries": "Oldest entries are deleted once history passes this size.",
+              "auto_archive_days": "0 = never; uncleared entries stay until you clear them."
+            }
+          },
+          "dashboard": {
+            "name": "Dashboard card (optional)",
+            "description": "A small, theme-aware card that ships with this integration. Add it from the card picker as **User Sessions**, or in YAML as `type: custom:user-sessions-card` with `view: failed`, `sessions` or `summary`.",
+            "data": {
+              "enable_card": "Load the User Sessions card"
+            },
+            "data_description": {
+              "enable_card": "Serves the card from the integration and loads it into your dashboards: no HACS frontend download or manual resource needed. Turning it off unloads it; cards already on a dashboard then show as missing."
+            }
+          }
+        }
+      }
+    },
+    "error": {
+      "invalid_network": "Not a valid network: {bad}. Use CIDR like 192.168.1.0/24, optionally followed by a label.",
+      "invalid_ip": "Not a valid IP: {bad}. Use an address like 203.0.113.7, optionally followed by a label."
+    }
+  },
+  "selector": {
+    "geo_provider": {
+      "options": {
+        "ip_api": "ip-api.com (free, adds VPN / data-centre flags)",
+        "ipwho_is": "ipwho.is (free, HTTPS)",
+        "none": "Off"
+      }
+    }
+  },
+  "services": {
+    "sign_out_user": {
+      "name": "Sign out user",
+      "description": "Remove every sign-in of one user.",
+      "fields": {
+        "user_id": {
+          "name": "User ID",
+          "description": "The user's ID (or use user name)."
+        },
+        "user_name": {
+          "name": "User name",
+          "description": "The user's display name."
+        },
+        "include_long_lived": {
+          "name": "Include long-lived tokens",
+          "description": "Also revoke the user's long-lived access tokens."
+        }
+      }
+    },
+    "sign_out_session": {
+      "name": "Sign out session",
+      "description": "Revoke one sign-in or one long-lived token.",
+      "fields": {
+        "session_id": {
+          "name": "Session ID",
+          "description": "session_id from a user sensor's attributes."
+        }
+      }
+    },
+    "clear_failed_sign_ins": {
+      "name": "Clear failed sign-ins",
+      "description": "Move failed sign-ins to history. With no fields, clears all of them.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "Clear one entry (id from the Failed sign-ins sensor)."
+        },
+        "ip": {
+          "name": "IP address",
+          "description": "Clear the entry for this IP."
+        }
+      }
+    },
+    "clear_history": {
+      "name": "Clear failed sign-in history",
+      "description": "Delete history entries. With no fields, deletes all of them.",
+      "fields": {
+        "older_than_days": {
+          "name": "Older than",
+          "description": "Only delete entries cleared more than this many days ago."
+        }
+      }
+    },
+    "trust_ip": {
+      "name": "Trust IP",
+      "description": "Mark an IP (and the devices seen from it) as yours, so it counts as known.",
+      "fields": {
+        "ip": {
+          "name": "IP address",
+          "description": "The IP to trust."
+        },
+        "label": {
+          "name": "Label",
+          "description": "A note, e.g. 'Work office'."
+        }
+      }
+    },
+    "forget_ip": {
+      "name": "Forget IP",
+      "description": "Remove an IP from the known/trusted list.",
+      "fields": {
+        "ip": {
+          "name": "IP address",
+          "description": "The IP to forget."
+        }
+      }
+    }
+  }
+}
