@@ -47,7 +47,7 @@ CONF_KNOWN_IPS = "known_ips"  # form-only: saved into the security store as trus
 TAILSCALE_RANGE = "100.64.0.0/10"
 # v0.5: optional dashboard card served by the integration itself
 CONF_ENABLE_CARD = "enable_card"
-CARD_VERSION = "0.6.1"
+CARD_VERSION = "0.7.0"
 CARD_URL = "/user_sessions/user-sessions-card.js"
 # v0.6: local device (MAC) lookup and a block prompt when HA bans an IP
 CONF_LOOKUP_MAC = "lookup_mac"
@@ -56,6 +56,14 @@ BAN_NOTIFICATION_PREFIX = "user_sessions_ban_"
 HA_BAN_NOTIFICATION_ID = "ip-ban"
 ISSUE_IP_BAN_OFF = "ip_ban_off"
 HTTP_SETTINGS_URL = "homeassistant://config/network"
+# v0.7: built-in phone notifications (nothing is sent until a device is picked)
+CONF_NOTIFY_TARGETS = "notify_targets"
+CONF_NOTIFY_NEW_SESSION = "notify_new_session"
+CONF_NOTIFY_FAILED = "notify_failed"
+CONF_NOTIFY_FAILED_MIN_RISK = "notify_failed_min_risk"
+CONF_NOTIFY_BAN = "notify_ban"
+CONF_NOTIFY_CLICK_URL = "notify_click_url"
+RISK_LEVELS = ["low", "medium", "high"]
 
 GEO_NONE = "none"
 GEO_IP_API = "ip_api"
@@ -77,6 +85,12 @@ DEFAULTS = {
     CONF_ENABLE_CARD: False,
     CONF_LOOKUP_MAC: True,
     CONF_NOTIFY_ON_BAN: True,
+    CONF_NOTIFY_TARGETS: [],
+    CONF_NOTIFY_NEW_SESSION: True,
+    CONF_NOTIFY_FAILED: True,
+    CONF_NOTIFY_FAILED_MIN_RISK: "low",
+    CONF_NOTIFY_BAN: True,
+    CONF_NOTIFY_CLICK_URL: "",
     CONF_KNOWN_NETWORKS: None,  # None = not set yet: built from the LAN adapters + Tailscale on first start
 }
 

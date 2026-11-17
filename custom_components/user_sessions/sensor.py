@@ -14,7 +14,7 @@ from . import SessionsCoordinator, get_options
 from .const import CONF_HISTORY_DAYS, CONF_HISTORY_MAX, CONF_TRACK_FAILED, DOMAIN
 from .security import SecurityManager, ha_ban_config
 
-_TOKEN_KEYS = ("session_id", "client_name", "created", "last_used", "last_ip")
+_TOKEN_KEYS = ("session_id", "client_name", "created", "last_used", "last_ip", "network", "network_label")
 HISTORY_ATTR_LIMIT = 50  # keep state attributes small; the full history lives in .storage
 
 
@@ -104,7 +104,7 @@ class UserSessionsSensor(CoordinatorEntity[SessionsCoordinator], SensorEntity):
             "last_via": latest.get("via"),
             "long_lived_count": len(user["long_lived_tokens"]),
             "sessions": user["sessions"],
-            "long_lived_tokens": [{k: t[k] for k in _TOKEN_KEYS} for t in user["long_lived_tokens"]],
+            "long_lived_tokens": [{k: t.get(k) for k in _TOKEN_KEYS} for t in user["long_lived_tokens"]],
         }
 
 

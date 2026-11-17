@@ -76,7 +76,7 @@ from .const import (
     STORAGE_KEY,
     STORAGE_VERSION,
 )
-from .security import SecurityManager, ha_ban_config
+from .security import SecurityManager, classify_network, ha_ban_config
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -235,6 +235,9 @@ class SessionsCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
             long_lived: list[dict[str, Any]] = []
             for token in list(user.refresh_tokens.values()):
                 info = _token_info(token)
+                if info["last_ip"]:
+                    info["network"] = classify_network(info["last_ip"], [])
+                    info["network_label"] = self.security.known_network_label(info["last_ip"])
                 if token.token_type == TOKEN_TYPE_NORMAL:
                     sessions.append(info)
                     current.add(token.id)
@@ -337,6 +340,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.async_on_unload(security.stop_capture)
 
     await _async_card(hass, bool(options[CONF_ENABLE_CARD]))
+
+    from .notifications import Notifier  # noqa: PLC0415
+
+    for unsub in Notifier(hass, options, security).async_start():
+        entry.async_on_unload(unsub)
 
     security.maintenance()
     async_check_ip_ban(hass)

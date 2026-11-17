@@ -61,6 +61,26 @@
               "auto_archive_days": "0 = never; uncleared entries stay until you clear them."
             }
           },
+          "notifications": {
+            "name": "Phone notifications (optional)",
+            "description": "Pick the Companion-app phones to alert. Nothing is sent until you pick one, so leave this empty if you use your own automations on the user_sessions_* events. Buttons only work for admins.",
+            "data": {
+              "notify_targets": "Send to",
+              "notify_new_session": "New sign-ins and long-lived tokens",
+              "notify_failed": "Failed sign-ins",
+              "notify_failed_min_risk": "Only failed sign-ins at or above",
+              "notify_ban": "IP bans (with what to block)",
+              "notify_click_url": "Open when tapped (optional)"
+            },
+            "data_description": {
+              "notify_targets": "Phones with the Home Assistant Companion app.",
+              "notify_new_session": "Includes who, which app or browser, where from, and a Sign it out button.",
+              "notify_failed": "One alert per IP; repeat attempts don't re-alert. Buttons: It was me (trust IP) and Clear.",
+              "notify_failed_min_risk": "Low sends everything.",
+              "notify_ban": "Sent when Home Assistant's IP ban blocks an address.",
+              "notify_click_url": "A dashboard path such as /lovelace/security, opened when the notification is tapped."
+            }
+          },
           "dashboard": {
             "name": "Dashboard card (optional)",
             "description": "A small, theme-aware card that ships with this integration. Add it from the card picker as **User Sessions**, or in YAML as `type: custom:user-sessions-card` with `view: failed`, `sessions` or `summary`.",
@@ -91,6 +111,13 @@
         "ip_api": "ip-api.com (free, adds VPN / data-centre flags)",
         "ipwho_is": "ipwho.is (free, HTTPS)",
         "none": "Off"
+      }
+    },
+    "notify_failed_min_risk": {
+      "options": {
+        "low": "Low (everything)",
+        "medium": "Medium",
+        "high": "High"
       }
     }
   },

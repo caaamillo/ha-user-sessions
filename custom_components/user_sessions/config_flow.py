@@ -15,7 +15,13 @@ from .const import (
     CONF_AUTO_ARCHIVE_DAYS,
     CONF_DISMISS_HA_NOTIFICATION,
     CONF_LOOKUP_MAC,
+    CONF_NOTIFY_BAN,
+    CONF_NOTIFY_CLICK_URL,
+    CONF_NOTIFY_FAILED,
+    CONF_NOTIFY_FAILED_MIN_RISK,
+    CONF_NOTIFY_NEW_SESSION,
     CONF_NOTIFY_ON_BAN,
+    CONF_NOTIFY_TARGETS,
     CONF_ENABLE_CARD,
     CONF_GEO_PROVIDER,
     CONF_HISTORY_DAYS,
@@ -28,12 +34,14 @@ from .const import (
     DEFAULTS,
     DOMAIN,
     GEO_PROVIDERS,
+    RISK_LEVELS,
 )
 from .security import parse_labeled
 
 SEC_NETWORKS = "networks"
 SEC_DETECTION = "detection"
 SEC_HISTORY = "history"
+SEC_NOTIFY = "notifications"
 SEC_DASHBOARD = "dashboard"
 SECTIONS = {
     SEC_NETWORKS: (CONF_KNOWN_NETWORKS, CONF_KNOWN_IPS, CONF_KNOWN_RADIUS_KM),
@@ -42,6 +50,10 @@ SECTIONS = {
         CONF_DISMISS_HA_NOTIFICATION,
     ),
     SEC_HISTORY: (CONF_HISTORY_DAYS, CONF_HISTORY_MAX, CONF_AUTO_ARCHIVE_DAYS),
+    SEC_NOTIFY: (
+        CONF_NOTIFY_TARGETS, CONF_NOTIFY_NEW_SESSION, CONF_NOTIFY_FAILED, CONF_NOTIFY_FAILED_MIN_RISK, CONF_NOTIFY_BAN,
+        CONF_NOTIFY_CLICK_URL,
+    ),
     SEC_DASHBOARD: (CONF_ENABLE_CARD,),
 }
 INT_KEYS = (CONF_SCAN_INTERVAL, CONF_KNOWN_RADIUS_KM, CONF_HISTORY_DAYS, CONF_HISTORY_MAX, CONF_AUTO_ARCHIVE_DAYS)
@@ -63,7 +75,7 @@ def _list(current: list[str]) -> selector.SelectSelector:
     )
 
 
-def _schema(cur: dict[str, Any]) -> vol.Schema:
+def _schema(cur: dict[str, Any], targets: list[dict[str, str]]) -> vol.Schema:
     nets, ips = list(cur.get(CONF_KNOWN_NETWORKS) or []), list(cur.get(CONF_KNOWN_IPS) or [])
     return vol.Schema({
         vol.Required(SEC_NETWORKS): section(vol.Schema({
@@ -88,6 +100,23 @@ def _schema(cur: dict[str, Any]) -> vol.Schema:
             vol.Required(CONF_HISTORY_MAX, default=cur[CONF_HISTORY_MAX]): _num(10, 5000),
             vol.Required(CONF_AUTO_ARCHIVE_DAYS, default=cur[CONF_AUTO_ARCHIVE_DAYS]): _num(0, 365, "days"),
         }), {"collapsed": True}),
+        vol.Required(SEC_NOTIFY): section(vol.Schema({
+            vol.Optional(CONF_NOTIFY_TARGETS, default=list(cur.get(CONF_NOTIFY_TARGETS) or [])): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[selector.SelectOptionDict(value=t["value"], label=t["label"]) for t in targets],
+                    multiple=True, mode=selector.SelectSelectorMode.LIST,
+                )
+            ),
+            vol.Required(CONF_NOTIFY_NEW_SESSION, default=cur[CONF_NOTIFY_NEW_SESSION]): selector.BooleanSelector(),
+            vol.Required(CONF_NOTIFY_FAILED, default=cur[CONF_NOTIFY_FAILED]): selector.BooleanSelector(),
+            vol.Required(CONF_NOTIFY_FAILED_MIN_RISK, default=cur[CONF_NOTIFY_FAILED_MIN_RISK]): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=RISK_LEVELS, translation_key=CONF_NOTIFY_FAILED_MIN_RISK, mode=selector.SelectSelectorMode.DROPDOWN
+                )
+            ),
+            vol.Required(CONF_NOTIFY_BAN, default=cur[CONF_NOTIFY_BAN]): selector.BooleanSelector(),
+            vol.Optional(CONF_NOTIFY_CLICK_URL, default=cur.get(CONF_NOTIFY_CLICK_URL) or ""): selector.TextSelector(),
+        }), {"collapsed": not cur.get(CONF_NOTIFY_TARGETS)}),
         vol.Required(SEC_DASHBOARD): section(vol.Schema({
             vol.Required(CONF_ENABLE_CARD, default=cur[CONF_ENABLE_CARD]): selector.BooleanSelector(),
         }), {"collapsed": not cur[CONF_ENABLE_CARD]}),
@@ -168,7 +197,12 @@ class UserSessionsOptionsFlow(OptionsFlow):
             from . import async_default_networks  # noqa: PLC0415
 
             cur[CONF_KNOWN_NETWORKS] = await async_default_networks(self.hass, cur)
+        from .notifications import mobile_app_targets  # noqa: PLC0415
         from .security import ha_ban_config  # noqa: PLC0415
+
+        targets = mobile_app_targets(self.hass)
+        have = {t["value"] for t in targets}
+        targets += [{"value": t, "label": f"{t} (not found)"} for t in (cur.get(CONF_NOTIFY_TARGETS) or []) if t not in have]
 
         ban = ha_ban_config(self.hass)
         placeholders["ban_status"] = (
@@ -177,5 +211,5 @@ class UserSessionsOptionsFlow(OptionsFlow):
             else "unknown"
         )
         return self.async_show_form(
-            step_id="init", data_schema=_schema(cur), errors=errors, description_placeholders=placeholders
+            step_id="init", data_schema=_schema(cur, targets), errors=errors, description_placeholders=placeholders
         )

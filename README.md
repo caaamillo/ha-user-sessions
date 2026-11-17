@@ -29,6 +29,7 @@ Home Assistant only shows each user their *own* sessions (Profile → Security).
 - **Ban prompts** — when HA's IP ban fires, a notification and a `user_sessions_ip_banned` event tell you exactly what to block on your own router or firewall (MAC for local devices, IP/range for internet ones). The integration never blocks anything itself, so it works with any network gear.
 - **History & retention** — clearing moves entries to a history (who cleared it and when), pruned by age and size; optional auto-archive.
 - **Known networks & IPs** — editable lists in the options form, pre-filled with your LAN (from HA's network adapters), Tailscale, and IPs that have signed in successfully. Add labels like `203.0.113.0/24 Work office`.
+- **Phone notifications (optional)** — pick your Companion-app phones in the options to get alerts for new sign-ins, failed sign-ins (with a minimum risk) and IP bans, with *It was me*, *Clear* and *Sign it out* buttons. Off until you pick a phone.
 - **Optional dashboard card** — a small, theme-aware card that ships with the integration (off by default).
 - **Admin-only actions** — sign out a user, revoke one session or token, clear failed sign-ins, clear history, trust / forget an IP.
 
@@ -70,19 +71,34 @@ Everything is in the UI: **Settings → Devices & services → User Sessions →
 | History & retention | Keep history for | 90 days |
 | | Maximum history entries | 500 |
 | | Auto-archive uncleared entries after | 0 (never) |
+| Phone notifications | Send to (Companion-app phones) | None (nothing sent) |
+| | New sign-ins / Failed sign-ins / IP bans | On (once a phone is picked) |
+| | Only failed sign-ins at or above | Low (everything) |
+| | Open when tapped | — |
 | Dashboard card | Load the User Sessions card | Off |
 
 ## Dashboard card (optional)
 
 Turn on **Configure → Dashboard card → Load the User Sessions card**. The integration serves the card itself and loads it into your dashboards, so there's no separate HACS download or resource to add. Turning it off unloads it again.
 
-Then add it from the card picker (**User Sessions**) or in YAML:
+Then add it from the card picker (**User Sessions**). The visual editor lets you pick the view and, for the summary, tick exactly which tiles to show. Or in YAML:
 
 ```yaml
 type: custom:user-sessions-card
 view: failed      # failed (default) | sessions | summary
 title: Failed sign-ins   # optional
 max: 6                   # rows before "Show all"
+tiles:                   # summary view only; omit for the first five
+  - accounts             # accounts signed in, of N accounts
+  - signins              # sign-ins in use, unused for 30+ days
+  - tokens               # long-lived tokens, held by N accounts
+  - failed               # failed sign-ins, last attempt
+  - known_ips            # known IPs
+  - internet             # optional: sign-ins from outside your known networks
+  - tailscale            # optional: sign-ins over Tailscale
+  - newest               # optional: newest sign-in (who, how, where)
+  - last_activity        # optional: who used Home Assistant last
+  - ip_ban               # optional: Home Assistant's IP-ban status
 ```
 
 | `view: failed` — Active / History, tap a row for details | `view: summary` and `view: sessions` |
@@ -125,6 +141,18 @@ Tip: trigger notifications on `user_sessions_failed_login` with `event_data: {is
 | `user_sessions.forget_ip` | `ip` |
 
 All are admin-only.
+
+## Phone notifications
+
+The simplest way: **Configure → Phone notifications**, tick your phone(s), done. You get:
+
+| Alert | When | Buttons |
+|---|---|---|
+| 🔑 New sign-in / long-lived token | A new device or token appears | Sign it out |
+| 🛡️ Failed sign-in · *risk* | First failed attempt from an IP (repeats don't re-alert), at or above your minimum risk | It was me (trust IP) · Clear |
+| ⛔ Sign-in ban | Home Assistant's IP ban blocks an address | — |
+
+Buttons only work when the person who taps is an admin. Prefer your own automations? Leave *Send to* empty and use the events below; the example shows the idea.
 
 ## Example: actionable failed sign-in alert
 

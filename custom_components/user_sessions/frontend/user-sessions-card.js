@@ -3,10 +3,13 @@
 //   view: failed | sessions | summary      (default: failed)
 //   title: optional heading
 //   max: rows before "Show all" (default 6)
+//   tiles: summary tiles to show, in order (summary view; default accounts, signins, tokens, failed, known_ips)
+//          optional extras: internet, tailscale, newest, last_activity, ip_ban
+// Everything can also be set in the visual card editor.
 // Theme-aware: uses Home Assistant's own CSS variables, so it follows whatever theme you run.
 (() => {
   if (customElements.get('user-sessions-card')) return;
-  const VERSION = '0.6.1';
+  const VERSION = '0.7.0';
   const FS = 'sensor.user_sessions_failed_sign_ins', FH = 'sensor.user_sessions_failed_sign_in_history';
   const RISK = { high: 'var(--error-color, #db4437)', medium: 'var(--warning-color, #ffa600)', low: 'var(--success-color, #43a047)' };
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -18,10 +21,18 @@
     return d === 1 ? 'yesterday' : d < 60 ? d + ' days ago' : Math.round(d / 30) + ' months ago';
   };
   const netLabel = n => ({ public: 'Internet', lan: 'Private', tailscale: 'Tailscale', loopback: 'Local' }[n] || n || '?');
+  const TILES = {
+    accounts: 'Accounts signed in', signins: 'Sign-ins in use', tokens: 'Long-lived tokens', failed: 'Failed sign-ins',
+    known_ips: 'Known IPs', internet: 'From the internet', tailscale: 'Over Tailscale', newest: 'Newest sign-in',
+    last_activity: 'Last activity', ip_ban: 'IP ban status',
+  };
+  const DEFAULT_TILES = ['accounts', 'signins', 'tokens', 'failed', 'known_ips'];
+  const SURL = v => (v || '').replace(/^Browser via /, '');
   const dev = d => d && d.browser ? (d.is_bot ? 'Bot / script' : d.browser + (d.os ? ' on ' + d.os : '')) : 'No browser info';
 
   class UserSessionsCard extends HTMLElement {
     static getStubConfig() { return { view: 'failed' }; }
+    static getConfigElement() { return document.createElement('user-sessions-card-editor'); }
     setConfig(c) { this._c = Object.assign({ view: 'failed', max: 6 }, c || {}); this._sig = null; if (this._h) this._render(); }
     getCardSize() { return this._c && this._c.view === 'summary' ? 3 : 5; }
     getGridOptions() { return { columns: 12, min_columns: 6, rows: 'auto' }; }
@@ -119,17 +130,33 @@
 
     // ---------- summary tiles ----------
     _summary() {
-      const users = this._users(), all = users.flatMap(u => u.sessions), toks = users.flatMap(u => u.tokens);
+      const users = this._users(), all = users.flatMap(u => u.sessions.map(x => ({ ...x, user: u.name }))), toks = users.flatMap(u => u.tokens);
       const act = this._a(FS, 'entries') || [], hi = act.filter(e => e.risk === 'high').length;
       const known = this._h.states['sensor.user_sessions_known_ips'];
-      const tile = (ic, big, lbl, warn) => `<div class="tile ${warn ? 'bad' : ''}"><ha-icon icon="${ic}"></ha-icon><div class="big">${esc(big)}</div><div class="sub">${esc(lbl)}</div></div>`;
-      return `<div class="head"><div class="title"><ha-icon icon="mdi:shield-account-outline"></ha-icon>${esc(this._c.title || 'User sessions')}</div></div><div class="tiles">
-        ${tile('mdi:account-group-outline', users.filter(u => u.sessions.length).length, 'accounts signed in')}
-        ${tile('mdi:login-variant', all.length, 'sign-ins')}
-        ${tile('mdi:key-chain-variant', toks.length, 'long-lived tokens')}
-        ${tile('mdi:shield-alert-outline', act.length, hi ? hi + ' high risk' : 'failed sign-ins', act.length > 0)}
-        ${tile('mdi:ip-network-outline', known ? known.state : '–', 'known IPs')}
-      </div>`;
+      const total = this._a('sensor.user_sessions_total_user_sessions', 'users');
+      const net = x => x.network || (x.last_ip ? (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(x.last_ip) ? 'tailscale' : /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(x.last_ip) ? 'lan' : 'public') : null);
+      const outside = all.filter(x => net(x) === 'public' && !x.network_label), ts = all.filter(x => net(x) === 'tailscale');
+      const stale = all.filter(x => !x.last_used || Date.now() - Date.parse(x.last_used) > 30 * 864e5).length;
+      const by = (k) => all.filter(x => x[k]).sort((a, b) => Date.parse(b[k]) - Date.parse(a[k]))[0];
+      const newest = by('created'), last = by('last_used');
+      const where = x => x ? [SURL(x.client_name || x.via), x.network_label || netLabel(net(x)), ago(x.created)].filter(Boolean).join(' · ') : '';
+      const ban = act[0] || {}, banOn = ban.ha_ip_ban_enabled ?? this._a(FS, 'ha_ip_ban_enabled'), thr = ban.ha_ban_threshold ?? this._a(FS, 'ha_ban_threshold');
+      const T = {
+        accounts: () => ['mdi:account-group-outline', users.filter(u => u.sessions.length).length, total ? `of ${total} accounts` : 'accounts signed in'],
+        signins: () => ['mdi:login-variant', all.length, `${stale} unused for 30+ days`],
+        tokens: () => ['mdi:key-chain-variant', toks.length, `held by ${users.filter(u => u.tokens.length).length} account${users.filter(u => u.tokens.length).length === 1 ? '' : 's'}`],
+        failed: () => ['mdi:shield-alert-outline', act.length, act.length ? (hi ? `${hi} high risk · ` : '') + `last ${ago(act[0].last_attempt)} · ${act[0].ip}` : 'none to review', act.length > 0],
+        known_ips: () => ['mdi:ip-network-outline', known ? known.state : '–', 'trusted or seen signing in'],
+        internet: () => ['mdi:earth', outside.length, outside.length ? [...new Set(outside.map(x => x.user))].join(', ') : 'none outside your known networks', outside.length > 0],
+        tailscale: () => ['mdi:vpn', ts.length, ts.length ? 'remote access via your tailnet' : 'none right now'],
+        newest: () => ['mdi:account-plus-outline', newest ? newest.user : '–', where(newest)],
+        last_activity: () => ['mdi:account-clock-outline', last ? last.user : '–', last ? [SURL(last.client_name || last.via), ago(last.last_used)].join(' · ') : ''],
+        ip_ban: () => ['mdi:shield-lock-outline', banOn ? `On · ${thr}` : 'Off', banOn ? `bans after ${thr} failed sign-ins` : 'turn on in Network → HTTP server', !banOn],
+      };
+      const keys = (Array.isArray(this._c.tiles) && this._c.tiles.length ? this._c.tiles : DEFAULT_TILES).filter(k => T[k]);
+      const tile = k => { const [ic, big, sub, warn] = T[k]();
+        return `<div class="tile ${warn ? 'bad' : ''}"><div class="tl"><ha-icon icon="${ic}"></ha-icon>${esc(TILES[k])}</div><div class="big">${esc(big)}</div><div class="sub">${esc(sub)}</div></div>`; };
+      return `<div class="head"><div class="title"><ha-icon icon="mdi:shield-account-outline"></ha-icon>${esc(this._c.title || 'User sessions')}</div></div><div class="tiles">${keys.map(tile).join('')}</div>`;
     }
 
     _bind() {
@@ -191,13 +218,52 @@
     .empty.ok ha-icon{color:var(--success-color,#43a047)}
     .grp+.grp{border-top:1px solid var(--divider-color)}
     .gname{display:flex;align-items:center;gap:6px;padding:10px 16px 2px;font-weight:500;color:var(--primary-text-color)}
-    .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;padding:6px 16px 14px}
-    .tile{padding:10px 12px;border-radius:12px;background:var(--secondary-background-color);--mdc-icon-size:20px;color:var(--state-icon-color)}
-    .tile .big{font-size:22px;font-weight:600;color:var(--primary-text-color);margin-top:4px}
+    .tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;padding:6px 16px 14px}
+    .tile{min-width:0;padding:10px 12px;border-radius:12px;background:var(--secondary-background-color);--mdc-icon-size:18px;color:var(--state-icon-color)}
+    .tile .tl{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .tile .tl ha-icon{color:var(--state-icon-color);flex:none}
+    .tile .big{font-size:22px;font-weight:600;color:var(--primary-text-color);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .tile .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .tile.bad{color:var(--error-color,#db4437)}.tile.bad .big{color:var(--error-color,#db4437)}
     @media (max-width:500px){.det{padding-left:16px}.grid{grid-template-columns:minmax(0,1fr)}.grid>span:nth-child(even),.grid code{margin-bottom:5px}}
   `;
   customElements.define('user-sessions-card', UserSessionsCard);
+
+  // ---------- visual editor (uses Home Assistant's own ha-form) ----------
+  class UserSessionsCardEditor extends HTMLElement {
+    setConfig(c) { this._c = { ...c }; this._render(); }
+    set hass(h) { this._h = h; if (this._f) this._f.hass = h; else this._render(); }
+    _schema() {
+      const s = [
+        { name: 'view', selector: { select: { mode: 'dropdown', options: [
+          { value: 'failed', label: 'Failed sign-ins (Active / History)' }, { value: 'sessions', label: 'Sign-ins by person' }, { value: 'summary', label: 'Summary tiles' }] } } },
+        { name: 'title', selector: { text: {} } },
+      ];
+      if ((this._c.view || 'failed') === 'failed') s.push({ name: 'max', selector: { number: { min: 1, max: 50, mode: 'box' } } });
+      if (this._c.view === 'summary') s.push({ name: 'tiles', selector: { select: { multiple: true, mode: 'list',
+        options: Object.entries(TILES).map(([value, label]) => ({ value, label })) } } });
+      return s;
+    }
+    _render() {
+      if (!this._c || !this._h) return;
+      if (!this._f) {
+        this._f = document.createElement('ha-form');
+        this._f.computeLabel = s => ({ view: 'Show', title: 'Title (optional)', max: 'Rows before "Show all"', tiles: 'Tiles to show' }[s.name] || s.name);
+        this._f.computeHelper = s => s.name === 'tiles' ? 'Tick the tiles you want, in any combination.' : undefined;
+        this._f.addEventListener('value-changed', ev => {
+          const c = { ...ev.detail.value };
+          Object.keys(c).forEach(k => (c[k] === '' || c[k] === undefined) && delete c[k]);
+          this._c = c; this._f.schema = this._schema();
+          this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: c }, bubbles: true, composed: true }));
+        });
+        this.appendChild(this._f);
+      }
+      this._f.hass = this._h;
+      this._f.data = { view: 'failed', ...(this._c.view === 'summary' && !this._c.tiles ? { tiles: DEFAULT_TILES } : {}), ...this._c };
+      this._f.schema = this._schema();
+    }
+  }
+  if (!customElements.get('user-sessions-card-editor')) customElements.define('user-sessions-card-editor', UserSessionsCardEditor);
   window.customCards = window.customCards || [];
   window.customCards.push({ type: 'user-sessions-card', name: 'User Sessions', description: 'Failed sign-ins (with history), sign-ins by person, or a summary — from the User Sessions integration.', preview: true });
   console.info(`%c USER-SESSIONS-CARD %c ${VERSION} `, 'background:#1565c0;color:#fff;border-radius:3px 0 0 3px', 'background:#444;color:#fff;border-radius:0 3px 3px 0');
