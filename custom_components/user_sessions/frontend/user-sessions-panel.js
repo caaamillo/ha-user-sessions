@@ -32,7 +32,7 @@
             <ha-icon icon="mdi:cog-outline"></ha-icon><span>Settings</span></a></div>
         <div class="content">
           <div id="sum"></div>
-          <div class="cols"><div id="failed"></div><div id="sessions"></div></div>
+          <div class="cols"><div id="sessions"></div><div id="failed"></div></div>
           <div class="foot">Admins only · <a href="https://github.com/caaamillo/ha-user-sessions" target="_blank" rel="noreferrer">User Sessions on GitHub</a></div>
         </div>`;
       // the sidebar toggle Home Assistant shows on phones
@@ -54,7 +54,7 @@
       this._cards = [
         mk('sum', { view: 'summary', title: 'Overview', tiles: ALL_TILES }),
         mk('failed', { view: 'failed', max: 10 }),
-        mk('sessions', { view: 'sessions', title: 'Sign-ins by person', filters: true, show_tokens: true }),
+        mk('sessions', { view: 'sessions', title: 'Sign-ins by person', filters: true, show_tokens: true, select: true, stale: true }),
       ];
       this._sync();
     }
@@ -97,7 +97,7 @@
     .content{max-width:1280px;margin:0 auto;padding:16px;box-sizing:border-box;display:flex;flex-direction:column;gap:16px}
     .cols{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
     .cols>div,#sum{min-width:0}
-    @media (min-width: 900px){ .cols{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)} }
+    @media (min-width: 1000px){ .cols{grid-template-columns:minmax(0,2fr) minmax(0,1fr)} }
     .foot{text-align:center;font-size:12.5px;color:var(--secondary-text-color);padding:4px 0 24px}
     .foot a{color:var(--primary-color)}
     @media (max-width: 600px){ .content{padding:8px;gap:8px} .link span{display:none} }`;

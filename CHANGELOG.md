@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0
+- Sign-ins list restyled to match the summary tiles: a coloured initials avatar per person with Admin badge and counts, a coloured icon and *where* pill per sign-in (home network blue, Tailscale teal, other labelled networks indigo, internet orange, connectors and tokens purple), and columns for where, last IP, last used and signed in. Folds to two-line rows on phones
+- Bulk sign-out (`select: true`): a Select button, tick rows or a whole person, then sign them all out at once. The browser you're using is never included
+- Stale sign-ins (`stale: true`): sign-ins unused for 30+ days are hidden behind a *Show N stale* button
+- *Sign out everywhere* per person
+- Sidebar panel: sign-ins first and wider, with select and stale turned on
+
 ## 0.9.0
 - Sidebar panel: pick any installed theme for it (Configure → Sidebar panel theme)
 - Card / panel: sign-ins can show search, a person picker and *where* / *type* filter chips with counts (`filters: true`), list long-lived tokens (`show_tokens: true`) and start pre-filtered (`where:`, `type:`). Where filters come from your own labelled known networks. All in the visual editor

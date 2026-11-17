@@ -82,7 +82,7 @@ Everything is in the UI: **Settings → Devices & services → User Sessions →
 
 ## Sidebar panel (optional)
 
-Turn on **Configure → Sidebar panel & dashboard card → Show User Sessions in the sidebar**. A **User Sessions** entry appears in the sidebar for admins: every overview tile, failed sign-ins (Active / History) and sign-ins by person with sign-out, on one page that works on phones too. It ships with the integration, so it updates with it; there's no dashboard to create or maintain. Pick any installed theme for it under *Sidebar panel theme* (used for this page only, like a dashboard view's theme). The sign-ins section has search, a person picker and *where* / *type* filters; your labelled known networks become the *where* filters automatically.
+Turn on **Configure → Sidebar panel & dashboard card → Show User Sessions in the sidebar**. A **User Sessions** entry appears in the sidebar for admins: every overview tile, failed sign-ins (Active / History) and sign-ins by person with sign-out, on one page that works on phones too. It ships with the integration, so it updates with it; there's no dashboard to create or maintain. Pick any installed theme for it under *Sidebar panel theme* (used for this page only, like a dashboard view's theme). The sign-ins section has search, a person picker and *where* / *type* filters; your labelled known networks become the *where* filters automatically. Each sign-in is colour-coded by where it comes from, and you can select several to sign out at once or reveal stale ones.
 
 <img src="docs/images/panel.png" alt="User Sessions sidebar panel with overview tiles, failed sign-ins and sign-ins by person (demo data)" width="100%">
 
@@ -110,6 +110,8 @@ tiles:                   # summary view only; omit for the first five
   - ip_ban               # optional: Home Assistant's IP-ban status
 filters: true            # sessions view: search, person picker, where / type chips
 show_tokens: true        # sessions view: list long-lived tokens too
+select: true             # sessions view: Select button to sign out several at once
+stale: true              # sessions view: hide sign-ins unused for 30+ days behind a button
 where: Home network      # sessions view: start filtered (any known-network label, Internet, Tailscale…)
 type: browser            # sessions view: start filtered (browser | app | connector | token)
 ```

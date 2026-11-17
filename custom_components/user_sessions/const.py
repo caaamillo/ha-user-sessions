@@ -47,7 +47,7 @@ CONF_KNOWN_IPS = "known_ips"  # form-only: saved into the security store as trus
 TAILSCALE_RANGE = "100.64.0.0/10"
 # v0.5: optional dashboard card served by the integration itself
 CONF_ENABLE_CARD = "enable_card"
-CARD_VERSION = "0.9.0"
+CARD_VERSION = "0.10.0"
 CARD_URL = "/user_sessions/user-sessions-card.js"
 # v0.8: optional sidebar panel (admins only)
 CONF_ENABLE_PANEL = "enable_panel"

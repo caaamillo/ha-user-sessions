@@ -6,12 +6,13 @@
 //   tiles: summary tiles to show, in order (summary view; default accounts, signins, tokens, failed, known_ips)
 //          optional extras: internet, tailscale, newest, last_activity, ip_ban
 //   filters: true — sessions view: search, person picker, where / type chips   show_tokens: true — list long-lived tokens too
+//   select: true — bulk select & sign out   stale: true — hide sign-ins unused for 30+ days behind a button
 //   where / type: filters to start with (where = a network label such as "Home network"; type = browser|app|connector|token)
 // Everything can also be set in the visual card editor.
 // Theme-aware: uses Home Assistant's own CSS variables, so it follows whatever theme you run.
 (() => {
   if (customElements.get('user-sessions-card')) return;
-  const VERSION = '0.9.0';
+  const VERSION = '0.10.0';
   const FS = 'sensor.user_sessions_failed_sign_ins', FH = 'sensor.user_sessions_failed_sign_in_history';
   const RISK = { high: 'var(--error-color, #db4437)', medium: 'var(--warning-color, #ffa600)', low: 'var(--success-color, #43a047)' };
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -34,6 +35,27 @@
   const NETOF = x => x.network || (x.last_ip ? (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(x.last_ip) ? 'tailscale' : /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(x.last_ip) ? 'lan' : 'public') : null);
   const typeOf = s => s.client_type || (s.kind === 'long_lived' ? 'token' : (s.via || '').startsWith('Companion') ? 'app' : 'browser');
   const whereOf = s => !s.last_ip ? (s.kind === 'long_lived' && s.last_used ? 'Token' : 'Not used yet') : (s.network_label || ({ public: 'Internet', lan: 'Local network', tailscale: 'Tailscale', loopback: 'This machine' }[NETOF(s)] || 'Unknown'));
+  const COL = { blue: '#0A84FF', teal: '#40C8E0', orange: '#FF9F0A', purple: '#BF5AF2', grey: '#8E8E93', green: '#30D158', pink: '#FF375F', indigo: '#5E5CE6', amber: '#FFB340' };
+  const STALE_MS = 30 * 864e5;
+  const isStale = s => (s.last_used ? Date.now() - Date.parse(s.last_used) : Date.now() - Date.parse(s.created || 0)) > STALE_MS;
+  const whereColor = s => { const n = NETOF(s);
+    if (typeOf(s) === 'token' && !s.last_ip) return s.last_used ? COL.purple : COL.grey;
+    if (!s.last_ip) return COL.grey;
+    if (typeOf(s) === 'connector') return COL.purple;
+    return n === 'lan' || n === 'loopback' ? COL.blue : n === 'tailscale' ? COL.teal : s.network_label ? COL.indigo : COL.orange; };
+  const avatarColor = name => { const p = [COL.blue, COL.teal, COL.purple, COL.orange, COL.green, COL.pink, COL.indigo, COL.amber];
+    let h = 0; for (const ch of String(name || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return p[h % p.length]; };
+  const what = s => {
+    const t = typeOf(s), v = s.via || '', host = SURL(v).replace(/\/$/, '');
+    if (t === 'token') return { title: s.client_name || 'Unnamed token', sub: 'Long-lived token', icon: 'mdi:key-variant' };
+    if (t === 'app') return { title: s.client_name || v, sub: 'Companion app', icon: 'mdi:cellphone' };
+    if (t === 'connector') return { title: s.client_name || host || 'Connector', sub: 'Signed in through ' + (host || 'OAuth'), icon: 'mdi:robot-outline' };
+    const local = /^(homeassistant\.local|localhost|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|\[?fe80)/.test(host);
+    return { title: s.client_name || (local ? 'Browser · local address' : host.endsWith('.ts.net') ? 'Browser · Tailscale address' : 'Browser · ' + (host || 'unknown')), sub: host, icon: 'mdi:monitor' };
+  };
+  let CUR = null, CUR_P = null;   // this browser's own sign-in, so it can't be bulk-signed-out by accident
+  const currentToken = h => CUR_P || (CUR_P = (typeof h.callWS === 'function' ? h.callWS({ type: 'auth/refresh_tokens' }) : Promise.resolve([]))
+    .then(l => { CUR = ((l || []).find(t => t.is_current) || {}).id || ''; }).catch(() => { CUR = ''; }));
   const dev = d => d && d.browser ? (d.is_bot ? 'Bot / script' : d.browser + (d.os ? ' on ' + d.os : '')) : 'No browser info';
 
   class UserSessionsCard extends HTMLElement {
@@ -123,50 +145,87 @@
       return head + `<div class="summary">${sum}</div><div class="rows">${rows}</div><div class="foot">${more}<span class="grow"></span>${clr}</div>`;
     }
 
-    // ---------- sign-ins by person (optional search & filters) ----------
+    // ---------- sign-ins by person (search, filters, bulk select, stale toggle: all optional) ----------
     _rows() {
       const tok = this._c.show_tokens;
       return this._users().flatMap(u => [
         ...u.sessions.map(s => ({ ...s, uid: u.id, user: u.name })),
         ...(tok ? u.tokens.map(s => ({ ...s, uid: u.id, user: u.name, kind: 'long_lived' })) : []),
-      ]);
+      ]).map(s => ({ ...s, stale: typeOf(s) !== 'token' && isStale(s) }));
     }
     _sessions() {
-      const c = this._c, users = this._users(), all = this._rows();
+      const c = this._c, users = this._users(), every = this._rows();
+      if (c.select && CUR === null) currentToken(this._h).then(() => this._render());
       const F = this._f || (this._f = { q: '', where: c.where || 'all', type: c.type || 'all', person: 'all' });
       if (F.person !== 'all' && !users.some(u => u.id === F.person)) F.person = 'all';
+      const staleMode = c.stale && this._staleOn && every.some(s => s.stale);
+      if (this._staleOn && !staleMode) this._staleOn = false;
+      const all = c.stale ? every.filter(s => (staleMode ? s.stale : !s.stale)) : every;
+      const staleN = c.stale ? every.filter(s => s.stale).length : 0;
       const q = c.filters ? F.q.trim().toLowerCase() : '';
       const ok = (s, o) => {
         const f = o ? { ...F, ...o } : F;
         return (f.where === 'all' || whereOf(s) === f.where) && (f.type === 'all' || typeOf(s) === f.type) && (f.person === 'all' || s.uid === f.person)
-          && (!q || [s.user, s.client_name, s.via, s.last_ip, whereOf(s), TYPES[typeOf(s)]].some(v => String(v || '').toLowerCase().includes(q)));
+          && (!q || [s.user, s.client_name, s.via, s.last_ip, whereOf(s), TYPES[typeOf(s)], what(s).title].some(v => String(v || '').toLowerCase().includes(q)));
       };
       const shown = all.filter(s => ok(s)), filtered = !!q || F.where !== 'all' || F.type !== 'all' || F.person !== 'all';
+      const pick = this._pick || (this._pick = new Set()), selOn = c.select && this._selOn;
+      const ids = new Set(every.map(s => s.session_id)); [...pick].forEach(k => { if (!ids.has(k)) pick.delete(k); });
       const chips = (grp, opts) => opts.map(([v, l]) => {
         const n = v === 'all' ? null : all.filter(s => ok(s, { [grp]: v })).length;
         if (n === 0 && F[grp] !== v) return '';
-        return `<button class="fc ${F[grp] === v ? 'on' : ''}" data-fc="${grp}" data-fv="${esc(v)}" aria-pressed="${F[grp] === v}">${esc(l)}${n != null ? `<span class="n">${n}</span>` : ''}</button>`;
+        const dot = grp === 'where' && v !== 'all' ? `<i class="dot" style="--w:${whereColor(all.find(s => whereOf(s) === v) || {})}"></i>` : '';
+        return `<button class="fc ${F[grp] === v ? 'on' : ''}" data-fc="${grp}" data-fv="${esc(v)}" aria-pressed="${F[grp] === v}">${dot}${esc(l)}${n != null ? `<span class="n">${n}</span>` : ''}</button>`;
       }).join('');
       const wheres = [...new Set(all.map(whereOf))].sort((a, b) => all.filter(s => whereOf(s) === b).length - all.filter(s => whereOf(s) === a).length);
-      const ppl = users.filter(u => u.sessions.length || (c.show_tokens && u.tokens.length));
-      const bar = !c.filters ? '' : `<div class="tb"><label class="sq"><ha-icon icon="mdi:magnify"></ha-icon><input data-q type="search" placeholder="Search device, app, IP or person" value="${esc(F.q)}" aria-label="Search sign-ins"></label>`
-        + `<select class="psel" data-person aria-label="Person"><option value="all">Everyone</option>${ppl.map(u => `<option value="${esc(u.id)}" ${F.person === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></div>`
+      const ppl = users.filter(u => all.some(s => s.uid === u.id));
+      const tools = (c.stale && staleN ? `<button class="fc ${staleMode ? 'on' : ''}" data-stale><ha-icon icon="mdi:${staleMode ? 'arrow-left' : 'history'}"></ha-icon>${staleMode ? 'Back to in use' : `Show ${staleN} stale`}</button>` : '')
+        + (c.select ? `<button class="fc ${selOn ? 'on' : ''}" data-sel aria-pressed="${!!selOn}"><ha-icon icon="mdi:${selOn ? 'check' : 'checkbox-multiple-marked-outline'}"></ha-icon>${selOn ? 'Done' : 'Select'}</button>` : '');
+      const bar = (c.filters ? `<div class="tb"><label class="sq"><ha-icon icon="mdi:magnify"></ha-icon><input data-q type="search" placeholder="Search device, app, IP or person" value="${esc(F.q)}" aria-label="Search sign-ins"></label>`
+        + `<select class="psel" data-person aria-label="Person"><option value="all">Everyone</option>${ppl.map(u => `<option value="${esc(u.id)}" ${F.person === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>${tools}</div>`
         + `<div class="tb">${chips('where', [['all', 'Anywhere'], ...wheres.map(w => [w, w])])}</div>`
-        + `<div class="tb">${chips('type', [['all', 'Any type'], ...Object.entries(TYPES)])}${filtered ? '<button class="lnk" data-fx>Clear filters</button>' : ''}</div>`;
-      const icon = s => ({ token: 'mdi:key-variant', app: 'mdi:cellphone', connector: 'mdi:robot-outline' }[typeOf(s)] || 'mdi:monitor');
-      const row = s => { const t = typeOf(s) === 'token';
-        return `<div class="row flat"><div class="ic"><ha-icon icon="${icon(s)}"></ha-icon></div>
-          <div class="txt"><div class="t">${esc(s.client_name || (t ? 'Unnamed token' : SURL(s.via)))}</div><div class="sub">${esc([whereOf(s), s.last_ip, s.last_used ? ago(s.last_used) : 'never used'].filter(Boolean).join(' · '))}</div></div>
-          <button class="btn warn" data-out="${esc(s.session_id)}">${this._armed === 'out:' + s.session_id ? 'Confirm' : t ? 'Revoke' : 'Sign out'}</button></div>`; };
+        + `<div class="tb">${chips('type', [['all', 'Any type'], ...Object.entries(TYPES)])}${filtered ? '<button class="lnk" data-fx>Clear filters</button>' : ''}</div>`
+        : tools ? `<div class="tb">${tools}</div>` : '');
+      const selectable = shown.filter(s => s.session_id !== CUR);
+      this._shownIds = selectable.map(s => s.session_id);
+      const anyTok = [...pick].some(k => every.find(s => s.session_id === k && typeOf(s) === 'token'));
+      const bArm = this._armed === 'bulk', verb = anyTok ? 'Sign out / revoke' : 'Sign out';
+      const bulk = !selOn ? '' : `<div class="bulk ${pick.size ? 'act' : ''}"><span>${pick.size ? pick.size + ' selected' : 'Tap rows to select them'}</span>`
+        + (selectable.some(s => !pick.has(s.session_id)) ? `<button class="lnk" data-sa>Select all ${selectable.length} shown</button>` : '')
+        + (pick.size ? '<button class="lnk" data-sc>Clear</button>' : '') + '<span class="grow"></span>'
+        + (pick.size ? `<button class="so ${bArm ? 'arm' : ''}" data-sb>${bArm ? `Confirm: ${verb.toLowerCase()} ${pick.size}` : `${verb} ${pick.size}`}</button>` : '') + '</div>';
+      const groupCk = list => {
+        if (!selOn) return '';
+        const sel = list.filter(s => s.session_id !== CUR); if (!sel.length) return '<span class="ckx"></span>';
+        const n = sel.filter(s => pick.has(s.session_id)).length, st = !n ? '' : n === sel.length ? 'on' : 'part';
+        return `<span class="ck ${st}" data-cg="${esc(sel.map(s => s.session_id).join(','))}" role="checkbox" aria-checked="${st === 'on' ? 'true' : st ? 'mixed' : 'false'}" tabindex="0"><ha-icon icon="mdi:${st === 'part' ? 'minus-thick' : 'check-bold'}"></ha-icon></span>`;
+      };
       const groups = users.map(u => {
         const rows = shown.filter(s => s.uid === u.id);
         if (!rows.length) return '';
-        const n = rows.filter(s => typeOf(s) !== 'token').length, k = rows.length - n;
-        return `<div class="grp"><div class="gname">${esc(u.name)}${u.admin ? '<span class="pill">Admin</span>' : ''}<span class="grow"></span><span class="sub">${[n ? n + ' sign-in' + (n === 1 ? '' : 's') : '', k ? k + ' token' + (k === 1 ? '' : 's') : ''].filter(Boolean).join(' · ')}</span></div>${rows.map(row).join('')}</div>`;
-      }).join('');
-      const tot = filtered ? `${shown.length} of ${all.length} shown` : `${all.length} ${c.show_tokens ? 'sign-ins and tokens' : 'sign-ins'}`;
-      const none = `<div class="empty ok"><ha-icon icon="mdi:account-off-outline"></ha-icon><div><b>${filtered ? 'No sign-ins match these filters' : 'Nobody is signed in'}</b></div></div>`;
-      return `<div class="head"><div class="title"><ha-icon icon="mdi:account-key-outline"></ha-icon>${esc(c.title || 'Sign-ins')}</div><span class="sub">${esc(tot)}</span></div>${bar}${groups || none}`;
+        const n = rows.filter(s => typeOf(s) !== 'token').length, k = rows.length - n, st = every.filter(s => s.uid === u.id && s.stale).length;
+        const ini = String(u.name || '?').split(/\s+/).map(x => x[0]).join('').slice(0, 2).toUpperCase(), ac = avatarColor(u.name);
+        const armed = this._armed === 'u:' + u.id, many = u.sessions.length > 1 && !selOn;
+        return `<div class="ug">${groupCk(rows)}<div class="av" style="--a:${ac}">${esc(ini)}</div><div class="grow"><div class="nm">${esc(u.name)}${u.admin ? '<span class="bdg">Admin</span>' : ''}</div>`
+          + `<div class="st">${[n ? n + (staleMode ? ' stale' : ' in use') : '', k ? k + ' token' + (k === 1 ? '' : 's') : '', !staleMode && st && c.stale ? st + ' stale' : ''].filter(Boolean).join(' · ')}</div></div>`
+          + (many ? `<button class="so ${armed ? 'arm' : ''}" data-sou="${esc(u.id)}">${armed ? 'Confirm' : 'Sign out everywhere'}</button>` : '') + `</div>${rows.map(r => this._sRow(r, selOn, pick)).join('')}`;
+      }).filter(Boolean);
+      const head = `<div class="srow thd ${selOn ? 'sel' : ''}">${selOn ? '<span></span>' : ''}<span></span><span>Device or app</span><span>Where</span><span>Last IP</span><span>Last used</span><span>Signed in</span><span></span></div>`;
+      const tot = staleMode ? `${shown.length} stale · unused for 30+ days` : filtered ? `${shown.length} of ${all.length} shown` : `${all.filter(s => typeOf(s) !== 'token').length} in use${c.show_tokens ? (n => ` · ${n} token${n === 1 ? '' : 's'}`)(all.filter(s => typeOf(s) === 'token').length) : ''}`;
+      const none = `<div class="empty ok"><ha-icon icon="mdi:account-off-outline"></ha-icon><div><b>${filtered ? 'No sign-ins match these filters' : 'Nobody is signed in'}</b>${!staleMode && staleN ? '<div class="sub">Stale sign-ins are hidden</div>' : ''}</div></div>`;
+      return `<div class="ss ${selOn ? 'selm' : ''}"><div class="head"><div class="title"><ha-icon icon="mdi:account-key-outline"></ha-icon>${esc(c.title || 'Sign-ins')}</div><span class="sub">${esc(tot)}</span></div>${bar}${bulk}${groups.length ? head + groups.join('') : none}<div style="height:8px"></div></div>`;
+    }
+    _sRow(s, selOn, pick) {
+      const k = what(s), w = whereOf(s), wc = whereColor(s), t = typeOf(s) === 'token', me = CUR && s.session_id === CUR;
+      const on = selOn && pick.has(s.session_id), can = selOn && !me, armed = this._armed === 'out:' + s.session_id;
+      const cr = s.created ? new Date(s.created).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '–';
+      return `<div class="srow ${s.stale ? 'stale' : ''} ${on ? 'pk' : ''} ${selOn ? 'sel' : ''}" ${can ? `data-ck="${esc(s.session_id)}" role="checkbox" aria-checked="${on}" tabindex="0"` : ''}>`
+        + (selOn ? (can ? `<span class="ck ${on ? 'on' : ''}"><ha-icon icon="mdi:check-bold"></ha-icon></span>` : '<span class="ckx"></span>') : '')
+        + `<div class="ki" style="--w:${t ? COL.purple : s.stale ? COL.grey : wc}"><ha-icon icon="${k.icon}"></ha-icon></div>`
+        + `<div class="cn"><div class="nm">${esc(k.title)}${me ? '<span class="bdg me">This browser</span>' : ''}</div><div class="st">${esc(k.sub)}</div></div>`
+        + `<span class="wp" style="--w:${wc}">${esc(w)}</span><span class="st cip">${esc(s.last_ip || '–')}</span>`
+        + `<span class="st clu">${esc(s.last_used ? ago(s.last_used) : 'never used')}</span><span class="st ccr">${esc(cr)}</span>`
+        + (selOn ? '<span></span>' : `<button class="so ${armed ? 'arm' : ''}" data-out="${esc(s.session_id)}">${armed ? 'Confirm' : t ? 'Revoke' : 'Sign out'}</button>`) + '</div>';
     }
 
     // ---------- summary tiles ----------
@@ -220,6 +279,19 @@
         if (this._qPos != null) { el.focus(); try { el.setSelectionRange(this._qPos, this._qPos); } catch (e) { /* not a text input */ } }
         el.addEventListener('blur', () => { this._qPos = null; });
       });
+      on('[data-stale]', () => { this._staleOn = !this._staleOn; this._render(); });
+      on('[data-sel]', () => { this._selOn = !this._selOn; if (!this._selOn) this._pick && this._pick.clear(); this._armed = null; this._render(); });
+      on('[data-sa]', () => { (this._shownIds || []).forEach(k => this._pick.add(k)); this._render(); });
+      on('[data-sc]', () => { this._pick.clear(); this._armed = null; this._render(); });
+      const tog = id => { this._pick.has(id) ? this._pick.delete(id) : this._pick.add(id); this._armed = null; this._render(); };
+      r.querySelectorAll('[data-ck]').forEach(el => { el.addEventListener('click', () => tog(el.dataset.ck));
+        el.addEventListener('keydown', ev => { if (ev.key === ' ' || ev.key === 'Enter') { ev.preventDefault(); tog(el.dataset.ck); } }); });
+      on('[data-cg]', el => { const ids = el.dataset.cg.split(','), all = ids.every(k => this._pick.has(k));
+        ids.forEach(k => all ? this._pick.delete(k) : this._pick.add(k)); this._armed = null; this._render(); });
+      on('[data-sb]', async () => { if (!this._arm('bulk')) return;
+        const ids = [...this._pick]; this._pick.clear(); this._selOn = false;
+        for (const id of ids) await this._call('sign_out_session', { session_id: id }); this._render(); });
+      on('[data-sou]', el => { const id = el.dataset.sou; if (this._arm('u:' + id)) this._call('sign_out_user', { user_id: id }); });
       on('[data-out]', el => { const id = el.dataset.out; if (this._arm('out:' + id)) this._call('sign_out_session', { session_id: id }); });
     }
   }
@@ -285,6 +357,47 @@
     .vr{width:1px;height:18px;background:var(--divider-color)}
     .lnk{border:0;background:none;color:var(--primary-color);font:inherit;font-size:13px;cursor:pointer;padding:4px 6px}
     .head>.sub{margin-left:auto}
+    .ss{container-type:inline-size}
+    .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--w);margin-right:6px;vertical-align:1px}
+    .fc ha-icon{--mdc-icon-size:15px;margin-right:4px;vertical-align:-2px}
+    .ug{display:flex;align-items:center;gap:12px;padding:12px 12px 10px;margin:8px 10px 2px;border-radius:16px;background:var(--us-fill);border:1px solid color-mix(in srgb, var(--primary-text-color) 6%, transparent)}
+    .av{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-size:14px;font-weight:700;background:color-mix(in srgb, var(--a) 22%, transparent);color:var(--a);box-shadow:0 0 0 2px color-mix(in srgb, var(--a) 25%, transparent)}
+    .ug .nm{font-size:16px;font-weight:700;color:var(--primary-text-color);display:flex;align-items:center;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ug .st{font-size:12.5px;color:var(--secondary-text-color);margin-top:2px}
+    .bdg{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:7px;background:var(--us-fill-2);color:var(--secondary-text-color);margin-left:4px}
+    .bdg.me{background:color-mix(in srgb, #30D158 18%, transparent);color:#30D158}
+    .srow{display:grid;grid-template-columns:32px minmax(0,1.7fr) auto minmax(0,.8fr) minmax(0,.7fr) minmax(0,.55fr) auto;gap:12px;align-items:center;padding:7px 16px;min-height:46px}
+    .srow.sel{grid-template-columns:22px 32px minmax(0,1.7fr) auto minmax(0,.8fr) minmax(0,.7fr) minmax(0,.55fr) 0}
+    .srow+.srow{border-top:1px solid color-mix(in srgb, var(--primary-text-color) 5%, transparent)}
+    .srow.stale{opacity:.55}
+    .srow.thd{min-height:0;padding-top:8px;padding-bottom:2px;font-size:10.5px;font-weight:700;color:var(--secondary-text-color);text-transform:uppercase;letter-spacing:.06em;opacity:.8}
+    .srow .nm{font-size:13.5px;font-weight:600;color:var(--primary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .srow .st,.srow .cn .st{font-size:12px;color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .cn{min-width:0}
+    .ki{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb, var(--w) 18%, transparent);color:var(--w);--mdc-icon-size:17px}
+    .wp{justify-self:start;font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;background:color-mix(in srgb, var(--w) 20%, transparent);color:var(--w);white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis}
+    .so{all:unset;cursor:pointer;justify-self:end;font-size:12px;font-weight:600;padding:6px 11px;border-radius:12px;background:var(--us-fill-2);color:var(--primary-text-color);white-space:nowrap}
+    .so:hover{background:color-mix(in srgb, #FF453A 20%, transparent);color:#FF6961}
+    .so.arm{background:#FF453A;color:#fff}
+    .srow[data-ck]{cursor:pointer}
+    .srow[data-ck]:hover{background:var(--us-fill)}
+    .srow.pk,.srow.pk:hover{background:color-mix(in srgb, var(--primary-color) 13%, transparent)}
+    .ck,.ckx{flex:none;width:20px;height:20px;box-sizing:border-box}
+    .ck{border-radius:6px;border:1.5px solid var(--secondary-text-color);display:grid;place-items:center;--mdc-icon-size:14px;color:transparent;cursor:pointer}
+    .ck.on,.ck.part{background:var(--primary-color);border-color:var(--primary-color);color:#fff}
+    .bulk{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 16px 6px;padding:6px 6px 6px 12px;border-radius:12px;background:var(--us-fill);min-height:34px;font-size:13px;color:var(--secondary-text-color)}
+    .bulk .so{background:color-mix(in srgb, #FF453A 20%, transparent);color:#FF6961}.bulk .so.arm{background:#FF453A;color:#fff}
+    .bulk.act{background:color-mix(in srgb, var(--primary-color) 14%, transparent);color:var(--primary-text-color)}
+    @container (max-width: 640px) {
+      .srow.thd{display:none}
+      .srow,.srow.sel{grid-template-columns:32px minmax(0,1fr) auto;grid-template-areas:"ki cn wp" "ki lu so";row-gap:3px;column-gap:10px;padding:8px 12px}
+      .srow.sel{grid-template-columns:22px 32px minmax(0,1fr) auto;grid-template-areas:"ck ki cn wp" "ck ki lu so"}
+      .srow>.ck,.srow>.ckx{grid-area:ck} .srow>.ki{grid-area:ki} .srow>.cn{grid-area:cn} .srow>.wp{grid-area:wp;justify-self:end}
+      .srow>.clu{grid-area:lu} .srow>.so,.srow.sel>span:last-child{grid-area:so;justify-self:end} .srow>.so{padding:5px 10px}
+      .srow>.cip,.srow>.ccr{display:none}
+      .srow>.clu::before{content:'Used '}
+      .ug{margin:8px 6px 2px;padding:10px;gap:10px} .ug .nm{font-size:15px} .av{width:34px;height:34px;font-size:13px} .ug .so{font-size:11.5px}
+    }
     .tile.bad{color:var(--error-color,#db4437)}.tile.bad .big{color:var(--error-color,#db4437)}
     @media (max-width:500px){.det{padding-left:16px}.grid{grid-template-columns:minmax(0,1fr)}.grid>span:nth-child(even),.grid code{margin-bottom:5px}}
   `;
@@ -308,6 +421,8 @@
         s.push(
           { name: 'filters', selector: { boolean: {} } },
           { name: 'show_tokens', selector: { boolean: {} } },
+          { name: 'select', selector: { boolean: {} } },
+          { name: 'stale', selector: { boolean: {} } },
           { name: 'where', selector: { select: { mode: 'dropdown', options: [{ value: 'all', label: 'Anywhere' }, ...[...wh].sort().map(w => ({ value: w, label: w }))] } } },
           { name: 'type', selector: { select: { mode: 'dropdown', options: [{ value: 'all', label: 'Any type' }, ...Object.entries(TYPES).map(([value, label]) => ({ value, label }))] } } },
         );
@@ -321,9 +436,11 @@
       if (!this._f) {
         this._f = document.createElement('ha-form');
         this._f.computeLabel = s => ({ view: 'Show', title: 'Title (optional)', max: 'Rows before "Show all"', tiles: 'Tiles to show',
-          filters: 'Show search & filters', show_tokens: 'Include long-lived tokens', where: 'Start with: where', type: 'Start with: type' }[s.name] || s.name);
+          filters: 'Show search & filters', show_tokens: 'Include long-lived tokens', select: 'Allow selecting several to sign out', stale: 'Hide stale sign-ins behind a button', where: 'Start with: where', type: 'Start with: type' }[s.name] || s.name);
         this._f.computeHelper = s => ({ tiles: 'Tick the tiles you want, in any combination.',
           filters: 'Search box, person picker, and where / type chips with counts.',
+          select: 'A Select button: tick rows or whole people, then sign them all out at once. Your own sign-in is never included.',
+          stale: 'Sign-ins unused for 30+ days are hidden, with a "Show N stale" button.',
           where: 'Your labelled known networks appear here (Configure → Known networks).',
           type: 'Connector = another service signed in to Home Assistant, e.g. an AI assistant.' }[s.name]);
         this._f.addEventListener('value-changed', ev => {
