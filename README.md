@@ -22,9 +22,11 @@ Home Assistant only shows each user their *own* sessions (Profile → Security).
   - Geolocation (city, region, country, ISP, ASN, distance from home, VPN / data-centre flags)
   - *Seen this IP before?* *Known location?* *Known device?*
   - HA IP-ban status and threshold
+  - For attempts from your own network: the device's **MAC address**, name and maker (from the ARP table or any router integration's device trackers)
   - A **low / medium / high risk** score with the reasons
   - Repeat attempts from one IP are folded into one entry (no alert storms)
   - Attempts logged before the integration started are back-filled on start-up
+- **Ban prompts** — when HA's IP ban fires, a notification and a `user_sessions_ip_banned` event tell you exactly what to block on your own router or firewall (MAC for local devices, IP/range for internet ones). The integration never blocks anything itself, so it works with any network gear.
 - **History & retention** — clearing moves entries to a history (who cleared it and when), pruned by age and size; optional auto-archive.
 - **Known networks & IPs** — editable lists in the options form, pre-filled with your LAN (from HA's network adapters), Tailscale, and IPs that have signed in successfully. Add labels like `203.0.113.0/24 Work office`.
 - **Optional dashboard card** — a small, theme-aware card that ships with the integration (off by default).
@@ -61,6 +63,8 @@ Everything is in the UI: **Settings → Devices & services → User Sessions →
 | | Known-location radius | 50 km |
 | Detection & alerts | Capture failed sign-ins | On |
 | | IP geolocation | ip-api.com |
+| | Look up the device (MAC) for local attempts | On |
+| | Notify me what to block when HA bans an IP | On |
 | | Session check interval | 30 s |
 | | Dismiss HA's "Login attempt failed" notification when cleared | On |
 | History & retention | Keep history for | 90 days |
@@ -105,6 +109,8 @@ Large list attributes are excluded from the recorder so your database doesn't gr
 - `user_sessions_new_session` — `user_name`, `kind` (`session` / `long_lived`), `via`, `client_name`, `last_ip`, `network`, `location`, `known_ip`, `known_location`, `risk`, `risk_reasons`, `session_id`
 - `user_sessions_failed_login` — `ip`, `description`, `attempt_type` (`password`, `api`, `websocket`, `token_exchange`, `webhook`), `location`, `isp`, `device`, `known_ip`, `known_location`, `risk`, `risk_reasons`, `attempts`, `is_new`
 
+- `user_sessions_ip_banned` — fires when HA's IP ban bans an address. Everything in the failed sign-in entry plus `banned_at`, `mac`, `lan_device` (`mac`, `name`, `vendor`, `randomized`, `source`), `known_mac` and `block_advice` (a list of plain-language steps)
+
 Tip: trigger notifications on `user_sessions_failed_login` with `event_data: {is_new: true}` so repeat attempts don't re-alert.
 
 ## Actions
@@ -142,9 +148,21 @@ actions:
             title: Clear
 ```
 
+## IP bans and MAC addresses
+Turn on banning under **Settings → System → Network → HTTP server** (*Enable IP banning*, then set *Login attempts before ban*). When an address is banned you get a notification titled **Sign-in ban: block this device?** with the IP, where it came from, the device and what to do. Clearing the entry dismisses it.
+
+A MAC address only exists on the local network segment, so:
+- **Local attempts** (same LAN/VLAN as Home Assistant): the MAC is read from the ARP table, and named from any `device_tracker` that reports `mac` (UniFi, FRITZ!Box, OpenWrt, ASUSWRT, Nmap…). Block it in your router or access point's client list.
+- **Internet, Tailscale or reverse-proxy attempts**: no MAC is visible, only the IP. Block it on your firewall, or remove the device from your tailnet.
+- Phones and laptops often use a **private (randomised) Wi-Fi address** that can change; the notification says so. Changing your Wi-Fi password is the surer fix for an unknown device.
+- A device that has signed in successfully before is flagged, so you don't lock out a family member over a typo.
+
+To lift a ban, delete the line from `ip_bans.yaml` in your config folder and restart.
+
 ## Privacy
 - Only **public** IPs are sent for geolocation, and only when a failed or new sign-in happens. Results are cached for 7 days. Turn it off in options.
 - ip-api.com's free tier is for non-commercial use and uses HTTP; choose ipwho.is (HTTPS) if you prefer.
+- MAC addresses are read locally and never sent anywhere.
 - Everything else stays in `.storage/user_sessions.*` on your instance.
 
 ## How failed sign-ins are detected

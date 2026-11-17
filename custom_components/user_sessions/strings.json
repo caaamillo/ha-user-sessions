@@ -35,12 +35,16 @@
             "data": {
               "track_failed": "Capture failed sign-ins",
               "geo_provider": "IP geolocation",
+              "lookup_mac": "Look up the device (MAC address) for attempts from your local network",
+              "notify_on_ban": "Notify me what to block when Home Assistant bans an IP",
               "scan_interval": "Session check interval",
               "dismiss_ha_notification": "Also dismiss HA's 'Login attempt failed' notification when cleared"
             },
             "data_description": {
               "track_failed": "Record every wrong password and every request with a bad token (from Home Assistant's own log), with IP, location, browser and device.",
               "geo_provider": "Looks up only public IPs, never LAN or Tailscale ones. Results are cached for 7 days.",
+              "lookup_mac": "Only possible on the same network segment as Home Assistant; internet and Tailscale attempts never reveal a MAC. Uses the system's ARP table and any router integration's device trackers. Nothing is blocked.",
+              "notify_on_ban": "Needs IP banning turned on (Settings → System → Network → HTTP server). Shows the IP, device and MAC with steps to block it on your own router or firewall, and fires a user_sessions_ip_banned event for your own automations.",
               "scan_interval": "Seconds between checks for new sign-ins and long-lived tokens."
             }
           },

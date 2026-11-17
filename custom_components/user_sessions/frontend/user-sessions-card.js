@@ -6,7 +6,7 @@
 // Theme-aware: uses Home Assistant's own CSS variables, so it follows whatever theme you run.
 (() => {
   if (customElements.get('user-sessions-card')) return;
-  const VERSION = '0.5.0';
+  const VERSION = '0.6.0';
   const FS = 'sensor.user_sessions_failed_sign_ins', FH = 'sensor.user_sessions_failed_sign_in_history';
   const RISK = { high: 'var(--error-color, #db4437)', medium: 'var(--warning-color, #ffa600)', low: 'var(--success-color, #43a047)' };
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -83,18 +83,20 @@
             <span>Seen this IP before</span>${yn(e.known_ip, 'Yes', 'Never')}
             <span>Known location</span>${yn(e.known_location, 'Yes', 'No')}
             <span>Known device</span>${yn(e.known_device, 'Yes', 'No')}
+            ${e.mac ? `<span>MAC address</span><span><code>${esc(e.mac)}</code>${e.lan_device?.randomized ? ' <span class="pill">private</span>' : ''}${e.known_mac ? ' <span class="yes">seen before</span>' : ''}</span>` : ''}
+            ${e.lan_device && (e.lan_device.name || e.lan_device.vendor) ? `<span>Network device</span><span>${esc([e.lan_device.name, e.lan_device.vendor].filter(Boolean).join(' · '))}</span>` : ''}
             ${e.isp ? `<span>Provider</span><span>${esc(e.isp)}</span>` : ''}
             ${e.distance_km != null ? `<span>From home</span><span>${Math.round(e.distance_km).toLocaleString()} km</span>` : ''}
             ${(e.urls || []).length ? `<span>Requested</span><code>${esc(e.urls.join(', '))}</code>` : ''}
             ${(e.user_agents || []).length ? `<span>User agent</span><code>${esc(e.user_agents[0])}</code>` : ''}
             <span>HA IP ban</span><span>${e.banned ? 'Banned' : e.ha_ip_ban_enabled ? 'Bans after ' + esc(e.ha_ban_threshold) + ' failures' : 'Off'}</span>
             ${tab === 'history' ? `<span>Cleared</span><span>${e.cleared_reason === 'auto_archived' ? 'Auto-archived' : 'By ' + esc(e.cleared_by || '?')} · ${ago(e.cleared_at)}</span>` : ''}
-          </div>${(e.risk_reasons || []).length ? `<div class="chips">${e.risk_reasons.map(r => `<span>${esc(r)}</span>`).join('')}</div>` : ''}
+          </div>${e.banned && (e.block_advice || []).length ? `<div class="advice"><b>Block it on your network</b><ul>${e.block_advice.map(a => `<li>${esc(a)}</li>`).join('')}</ul></div>` : ''}${(e.risk_reasons || []).length ? `<div class="chips">${e.risk_reasons.map(r => `<span>${esc(r)}</span>`).join('')}</div>` : ''}
           <div class="btns">${e.known_ip ? '' : `<button class="btn" data-trust="${esc(e.ip)}">${this._armed === 'trust:' + e.ip ? 'Tap again to trust' : 'It was me · trust IP'}</button>`}${tab === 'active' ? `<button class="btn" data-clear1="${esc(e.id)}">Move to history</button>` : ''}</div></div>`;
         return `<div class="row ${exp ? 'open' : ''}" data-exp="${esc(e.id)}" tabindex="0" role="button" aria-expanded="${exp}">
             <div class="ic" style="color:${rc};background:color-mix(in srgb, ${rc} 16%, transparent)"><ha-icon icon="mdi:${e.attempt_type === 'password' ? 'form-textbox-password' : e.network === 'public' ? 'earth' : 'shield-alert-outline'}"></ha-icon></div>
-            <div class="txt"><div class="t">${esc(e.ip)} <span class="pill">${esc(netLabel(e.network))}</span><span class="pill" style="color:${rc};background:color-mix(in srgb, ${rc} 16%, transparent)">${esc((e.risk || '?').toUpperCase())}</span></div>
-              <div class="sub">${esc([e.location, e.description, dev(e.device), e.attempts > 1 ? e.attempts + ' attempts' : ''].filter(Boolean).join(' · '))}</div></div>
+            <div class="txt"><div class="t">${esc(e.ip)} <span class="pill">${esc(netLabel(e.network))}</span><span class="pill" style="color:${rc};background:color-mix(in srgb, ${rc} 16%, transparent)">${esc((e.risk || '?').toUpperCase())}</span>${e.banned ? '<span class="pill ban">BANNED</span>' : ''}</div>
+              <div class="sub">${esc([e.location, e.lan_device?.name, e.description, dev(e.device), e.attempts > 1 ? e.attempts + ' attempts' : ''].filter(Boolean).join(' · '))}</div></div>
             <div class="when">${ago(when)}</div></div>${det}`;
       }).join('');
       const more = list.length > max ? `<button class="btn" data-more>${this._open ? 'Show fewer' : 'Show all ' + list.length}</button>` : '';
@@ -171,6 +173,9 @@
     .grid>span:nth-child(even),.grid code{color:var(--primary-text-color);overflow-wrap:anywhere}
     .grid code{font-size:11px}
     .yes{color:var(--success-color,#43a047)!important}.no{color:var(--error-color,#db4437)!important}
+    .pill.ban{background:color-mix(in srgb, var(--error-color, #db4437) 18%, transparent);color:var(--error-color, #db4437)}
+    .advice{margin-top:9px;padding:8px 10px;border-radius:10px;background:color-mix(in srgb, var(--error-color, #db4437) 9%, transparent);color:var(--primary-text-color);font-size:12.5px}
+    .advice ul{margin:4px 0 0;padding-left:18px}.advice li{margin:2px 0;color:var(--secondary-text-color)}
     .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
     .chips span{font-size:11px;padding:2px 8px;border-radius:8px;background:color-mix(in srgb, var(--error-color,#db4437) 14%, transparent);color:var(--error-color,#db4437)}
     .btns{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:4px;margin-top:6px}

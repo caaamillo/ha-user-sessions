@@ -203,6 +203,7 @@ class FailedSignInsSensor(_SecurityEntity):
         return {
             "tracking_enabled": get_options(self.entry)[CONF_TRACK_FAILED],
             "total_attempts": sum(e.get("attempts", 1) for e in active),
+            "banned": sum(1 for e in active if e.get("banned")),
             "highest_risk": next((lvl for lvl in ("high", "medium", "low") if any(e.get("risk") == lvl for e in active)), None),
             "last_ip": latest.get("ip"),
             "last_location": latest.get("location"),

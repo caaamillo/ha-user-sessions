@@ -12,6 +12,11 @@ Store layout (.storage/user_sessions.security):
   ip_book   : every IP ever seen on a *successful* sign-in (first/last seen, users, clients)
   trusted   : IPs the user marked as theirs (trust_ip service)
   geo_cache : geolocation results per IP
+
+Local devices: for attempts from the same network segment we also record the device's MAC
+address (see lan.py). When Home Assistant's own IP ban fires we raise a notification and a
+`user_sessions_ip_banned` event telling the user what to block on their own router/firewall.
+We never block anything ourselves: network gear differs from home to home.
 """
 from __future__ import annotations
 
@@ -29,14 +34,19 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from . import lan
 from .const import (
+    BAN_NOTIFICATION_PREFIX,
     CONF_AUTO_ARCHIVE_DAYS,
     CONF_GEO_PROVIDER,
     CONF_HISTORY_DAYS,
     CONF_HISTORY_MAX,
     CONF_KNOWN_NETWORKS,
     CONF_KNOWN_RADIUS_KM,
+    CONF_LOOKUP_MAC,
+    CONF_NOTIFY_ON_BAN,
     EVENT_FAILED_LOGIN,
+    EVENT_IP_BANNED,
     GEO_CACHE_TTL,
     GEO_IP_API,
     GEO_IPWHO,
@@ -238,6 +248,56 @@ def location_label(geo: dict[str, Any] | None) -> str | None:
 # --------------------------------------------------------------------------- log handler
 
 
+def mac_label(dev: dict[str, Any] | None) -> str | None:
+    """'aa:bb:cc:dd:ee:ff (Kitchen tablet, Apple)' style label."""
+    if not dev or not dev.get("mac"):
+        return None
+    extra = ", ".join(x for x in (dev.get("name"), dev.get("vendor")) if x)
+    return f"{dev['mac']} ({extra})" if extra else dev["mac"]
+
+
+def block_advice(entry: dict[str, Any]) -> list[str]:
+    """Plain-language steps for blocking the source of an attempt on the user's own network."""
+    ip = entry.get("ip")
+    network = entry.get("network")
+    dev = entry.get("lan_device") or {}
+    steps: list[str] = []
+    if network == "lan" and dev.get("mac"):
+        steps.append(
+            f"Block MAC {dev['mac']} in your router, firewall or Wi-Fi access point "
+            "(usually its client or device list)."
+        )
+        if dev.get("name") or dev.get("vendor"):
+            steps.append(f"The device looks like: {', '.join(x for x in (dev.get('name'), dev.get('vendor')) if x).rstrip('.')}.")
+        if dev.get("randomized"):
+            steps.append(
+                "This is a private (randomised) Wi-Fi address, as phones and laptops use. The device "
+                "may come back with a new one, so changing your Wi-Fi password is the surer fix if it isn't yours."
+            )
+        if entry.get("known_mac"):
+            steps.append("This device has signed in successfully before: check it isn't a family member's typo first.")
+    elif network == "lan":
+        steps.append(
+            f"The device's MAC address couldn't be found. Look up {ip} in your router's client list "
+            "to identify and block it."
+        )
+    elif network == "tailscale":
+        steps.append(
+            f"{ip} is a Tailscale address: remove or expire that device in the Tailscale admin console. "
+            "A MAC address isn't visible over Tailscale."
+        )
+    elif network == "public":
+        steps.append(
+            f"{ip} is an internet address, so no MAC address is visible. Block the IP (or its range) on your "
+            "firewall if it keeps trying, and close any port forward or tunnel you don't need."
+        )
+    steps.append(
+        "Home Assistant has already banned this IP. To lift the ban, delete it from ip_bans.yaml in your "
+        "config folder and restart."
+    )
+    return steps
+
+
 class _BanLogHandler(logging.Handler):
     """Forwards http.ban log lines to the event loop."""
 
@@ -278,6 +338,8 @@ class SecurityManager:
         self._listeners: list[Callable[[], None]] = []
         self._known_nets = parse_known_networks(options.get(CONF_KNOWN_NETWORKS))
         self._geo_locks: dict[str, asyncio.Lock] = {}
+        self._pending: set[asyncio.Task] = set()
+        self._ip_locks: dict[str, asyncio.Lock] = {}
 
     # ---- lifecycle ------------------------------------------------------
     async def async_load(self) -> None:
@@ -497,7 +559,24 @@ class SecurityManager:
             rec["clients"] = (rec["clients"] + [client])[-10:]
         if new:
             self._save()
+        if self._mac_lookup_on() and classify_network(ip, []) == "lan":
+            self.hass.async_create_task(self._async_learn_mac(ip))
         return new
+
+    def _mac_lookup_on(self) -> bool:
+        return bool(self.options.get(CONF_LOOKUP_MAC, True))
+
+    async def _async_learn_mac(self, ip: str) -> None:
+        """Remember which device (MAC) uses an IP that signed in successfully."""
+        dev = await lan.async_lookup(self.hass, ip)
+        rec = self.ip_book.get(ip)
+        if not dev or rec is None or dev["mac"] in rec.get("macs", []):
+            return
+        rec["macs"] = (rec.get("macs", []) + [dev["mac"]])[-5:]
+        self._save()
+
+    def mac_is_known(self, mac: str | None) -> bool:
+        return bool(mac) and any(mac in (r.get("macs") or []) for r in list(self.ip_book.values()) + list(self.trusted.values()))
 
     def ip_is_known(self, ip: str) -> bool:
         return ip in self.ip_book or ip in self.trusted
@@ -541,6 +620,10 @@ class SecurityManager:
         if fp:
             known_device = any(fp in (t.get("devices") or []) for t in self.trusted.values())
 
+        lan_device = None
+        if network == "lan" and self._mac_lookup_on():
+            lan_device = await lan.async_lookup(self.hass, ip)
+
         prior_failures = sum(e.get("attempts", 1) for e in self.active + self.history if e.get("ip") == ip)
 
         out.update(
@@ -558,6 +641,8 @@ class SecurityManager:
             device=ua_info,
             device_fingerprint=fp,
             known_device=known_device,
+            lan_device=lan_device,
+            known_mac=self.mac_is_known((lan_device or {}).get("mac")),
             prior_failures_from_ip=prior_failures,
         )
         return out
@@ -597,9 +682,19 @@ class SecurityManager:
     # ---- failed sign-ins --------------------------------------------------
     @callback
     def _handle_failed(self, parsed: dict[str, Any], ts: float) -> None:
-        self.hass.async_create_task(self._async_record_failed(parsed, ts))
+        task = self.hass.async_create_task(self._async_record_failed(parsed, ts))
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
 
     async def _async_record_failed(self, parsed: dict[str, Any], ts: float, backfilled: bool = False) -> None:
+        # Enrichment awaits (geo, ARP), so serialise per IP or rapid repeats would each create an entry.
+        lock = self._ip_locks.setdefault(parsed["ip"], asyncio.Lock())
+        async with lock:
+            await self._async_record_failed_locked(parsed, ts, backfilled)
+        if not lock.locked() and not lock._waiters:  # noqa: SLF001 - drop idle locks
+            self._ip_locks.pop(parsed["ip"], None)
+
+    async def _async_record_failed_locked(self, parsed: dict[str, Any], ts: float, backfilled: bool) -> None:
         when = dt_util.utc_from_timestamp(ts).isoformat()
         ip = parsed["ip"]
         attempt_type, description = describe_request(parsed.get("url"))
@@ -617,6 +712,8 @@ class SecurityManager:
             if parsed.get("user_agent") and parsed["user_agent"] not in existing["user_agents"]:
                 existing["user_agents"] = (existing["user_agents"] + [parsed["user_agent"]])[-5:]
             existing.update(ban_info)
+            if existing.get("network") == "lan" and not existing.get("lan_device") and self._mac_lookup_on():
+                await self._async_refresh_lan_device(existing)
             existing["risk"], existing["risk_reasons"] = self.risk(existing["assessment"], existing["attempt_type"])
             entry, is_new = existing, False
         else:
@@ -638,6 +735,9 @@ class SecurityManager:
                 "known_ip": assessment.get("known_ip"),
                 "known_location": assessment.get("known_location"),
                 "known_device": assessment.get("known_device"),
+                "lan_device": assessment.get("lan_device"),
+                "mac": (assessment.get("lan_device") or {}).get("mac"),
+                "known_mac": assessment.get("known_mac"),
                 "device": assessment.get("device"),
                 "distance_km": assessment.get("distance_km"),
                 "isp": (assessment.get("geo") or {}).get("isp"),
@@ -657,14 +757,66 @@ class SecurityManager:
             EVENT_FAILED_LOGIN, {**self.public_entry(entry), "is_new": is_new and not backfilled}
         )
 
+    async def _async_refresh_lan_device(self, entry: dict[str, Any]) -> None:
+        dev = await lan.async_lookup(self.hass, entry["ip"])
+        if dev:
+            entry["lan_device"] = dev
+            entry["mac"] = dev["mac"]
+            entry["known_mac"] = self.mac_is_known(dev["mac"])
+
     @callback
     def _handle_ban(self, ip: str, ts: float) -> None:
-        for e in self.active:
-            if e["ip"] == ip:
-                e["banned"] = True
-                e["banned_at"] = dt_util.utc_from_timestamp(ts).isoformat()
+        self.hass.async_create_task(self._async_handle_ban(ip, ts))
+
+    async def _async_handle_ban(self, ip: str, ts: float) -> None:
+        """HA's ip_ban just banned `ip`: mark it and tell the user what to block on their network."""
+        if self._pending:  # the failed attempt that tipped it over may still be enriching
+            await asyncio.gather(*list(self._pending), return_exceptions=True)
+        when = dt_util.utc_from_timestamp(ts).isoformat()
+        entry = next((e for e in self.active if e["ip"] == ip), None)
+        if entry is None:  # ban without a captured attempt (e.g. capture started late)
+            await self._async_record_failed({"ip": ip, "hostname": None, "url": None, "user_agent": None}, ts)
+            entry = next((e for e in self.active if e["ip"] == ip), None)
+            if entry is None:
+                return
+        if entry.get("network") == "lan" and self._mac_lookup_on():
+            await self._async_refresh_lan_device(entry)
+        entry["banned"] = True
+        entry["banned_at"] = when
+        entry["block_advice"] = block_advice(entry)
         self._save()
         self._notify()
+
+        payload = {**self.public_entry(entry)}
+        self.hass.bus.async_fire(EVENT_IP_BANNED, payload)
+        if self.options.get(CONF_NOTIFY_ON_BAN, True):
+            self._create_ban_notification(entry)
+
+    def _create_ban_notification(self, entry: dict[str, Any]) -> None:
+        from homeassistant.components import persistent_notification  # noqa: PLC0415
+
+        where = entry.get("location") or {"public": "Internet", "lan": "Local network", "tailscale": "Tailscale"}.get(
+            entry.get("network") or "", "Unknown"
+        )
+        device = mac_label(entry.get("lan_device"))
+        lines = [
+            f"**{entry['ip']}** was banned after {entry.get('attempts', 1)} failed sign-in"
+            f"{'s' if entry.get('attempts', 1) != 1 else ''}.",
+            "",
+            f"- Where: {where}",
+        ]
+        if device:
+            lines.append(f"- Device: {device}")
+        d = entry.get("device") or {}
+        if client := " on ".join(x for x in (d.get("browser"), d.get("os")) if x):
+            lines.append(f"- Client: {client}")
+        lines += ["", "**What you can do**", *[f"- {s}" for s in entry["block_advice"]]]
+        persistent_notification.async_create(
+            self.hass,
+            "\n".join(lines),
+            title="Sign-in ban: block this device?",
+            notification_id=f"{BAN_NOTIFICATION_PREFIX}{entry['id']}",
+        )
 
     def _ban_status(self, ip: str) -> dict[str, Any]:
         """Is HA's own ip_ban on, and how close is this IP to being banned?"""
@@ -702,6 +854,11 @@ class SecurityManager:
             else:
                 keep.append(e)
         if moved:
+            from homeassistant.components import persistent_notification  # noqa: PLC0415
+
+            for e in moved:
+                if e.get("banned"):
+                    persistent_notification.async_dismiss(self.hass, f"{BAN_NOTIFICATION_PREFIX}{e['id']}")
             self.active = keep
             self.history = moved + self.history
             self._prune_history()
@@ -756,10 +913,15 @@ class SecurityManager:
         rec = self.trusted.setdefault(ip, {"first_seen": dt_util.utcnow().isoformat()})
         rec["label"] = label or rec.get("label")
         rec["devices"] = sorted(set(rec.get("devices", [])) | set(devices))
+        macs = {e["mac"] for e in self.active + self.history if e.get("ip") == ip and e.get("mac")}
+        if macs:
+            rec["macs"] = sorted(set(rec.get("macs", [])) | macs)
         for e in self.active + self.history:
             if e.get("ip") == ip:
                 e["known_ip"] = True
                 e["known_device"] = True
+                if e.get("mac"):
+                    e["known_mac"] = True
         self._save()
         self._notify()
 

@@ -11,6 +11,7 @@ SECURITY_STORAGE_VERSION = 1
 
 EVENT_NEW_SESSION = "user_sessions_new_session"
 EVENT_FAILED_LOGIN = "user_sessions_failed_login"
+EVENT_IP_BANNED = "user_sessions_ip_banned"
 
 SERVICE_SIGN_OUT_USER = "sign_out_user"
 SERVICE_SIGN_OUT_SESSION = "sign_out_session"
@@ -46,8 +47,13 @@ CONF_KNOWN_IPS = "known_ips"  # form-only: saved into the security store as trus
 TAILSCALE_RANGE = "100.64.0.0/10"
 # v0.5: optional dashboard card served by the integration itself
 CONF_ENABLE_CARD = "enable_card"
-CARD_VERSION = "0.5.0"
+CARD_VERSION = "0.6.0"
 CARD_URL = "/user_sessions/user-sessions-card.js"
+# v0.6: local device (MAC) lookup and a block prompt when HA bans an IP
+CONF_LOOKUP_MAC = "lookup_mac"
+CONF_NOTIFY_ON_BAN = "notify_on_ban"
+BAN_NOTIFICATION_PREFIX = "user_sessions_ban_"
+HA_BAN_NOTIFICATION_ID = "ip-ban"
 
 GEO_NONE = "none"
 GEO_IP_API = "ip_api"
@@ -67,6 +73,8 @@ DEFAULTS = {
     CONF_AUTO_ARCHIVE_DAYS: 0,
     CONF_DISMISS_HA_NOTIFICATION: True,
     CONF_ENABLE_CARD: False,
+    CONF_LOOKUP_MAC: True,
+    CONF_NOTIFY_ON_BAN: True,
     CONF_KNOWN_NETWORKS: None,  # None = not set yet: built from the LAN adapters + Tailscale on first start
 }
 

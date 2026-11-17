@@ -14,6 +14,8 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_AUTO_ARCHIVE_DAYS,
     CONF_DISMISS_HA_NOTIFICATION,
+    CONF_LOOKUP_MAC,
+    CONF_NOTIFY_ON_BAN,
     CONF_ENABLE_CARD,
     CONF_GEO_PROVIDER,
     CONF_HISTORY_DAYS,
@@ -35,7 +37,10 @@ SEC_HISTORY = "history"
 SEC_DASHBOARD = "dashboard"
 SECTIONS = {
     SEC_NETWORKS: (CONF_KNOWN_NETWORKS, CONF_KNOWN_IPS, CONF_KNOWN_RADIUS_KM),
-    SEC_DETECTION: (CONF_TRACK_FAILED, CONF_GEO_PROVIDER, CONF_SCAN_INTERVAL, CONF_DISMISS_HA_NOTIFICATION),
+    SEC_DETECTION: (
+        CONF_TRACK_FAILED, CONF_GEO_PROVIDER, CONF_LOOKUP_MAC, CONF_NOTIFY_ON_BAN, CONF_SCAN_INTERVAL,
+        CONF_DISMISS_HA_NOTIFICATION,
+    ),
     SEC_HISTORY: (CONF_HISTORY_DAYS, CONF_HISTORY_MAX, CONF_AUTO_ARCHIVE_DAYS),
     SEC_DASHBOARD: (CONF_ENABLE_CARD,),
 }
@@ -73,6 +78,8 @@ def _schema(cur: dict[str, Any]) -> vol.Schema:
                     options=GEO_PROVIDERS, translation_key=CONF_GEO_PROVIDER, mode=selector.SelectSelectorMode.DROPDOWN
                 )
             ),
+            vol.Required(CONF_LOOKUP_MAC, default=cur[CONF_LOOKUP_MAC]): selector.BooleanSelector(),
+            vol.Required(CONF_NOTIFY_ON_BAN, default=cur[CONF_NOTIFY_ON_BAN]): selector.BooleanSelector(),
             vol.Required(CONF_SCAN_INTERVAL, default=cur[CONF_SCAN_INTERVAL]): _num(10, 3600, "s"),
             vol.Required(CONF_DISMISS_HA_NOTIFICATION, default=cur[CONF_DISMISS_HA_NOTIFICATION]): selector.BooleanSelector(),
         }), {"collapsed": True}),

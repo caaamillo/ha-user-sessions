@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0
+- MAC address, device name and maker for failed sign-ins from your own network (ARP table, any router integration's device trackers, device registry; vendor via the IEEE OUI list)
+- Learns which MACs have signed in successfully, so a known device is flagged
+- When Home Assistant's IP ban fires: a notification with steps to block the device on your own router/firewall, and a new `user_sessions_ip_banned` event. Nothing is blocked by the integration itself
+- Card: MAC / network device rows, a BANNED badge and the block steps
+- Fix: rapid repeat attempts from one IP could create duplicate entries
+
 ## 0.5.0
 - Optional, theme-aware dashboard card (`custom:user-sessions-card`) bundled with the integration; turn it on in options (off by default). Views: failed (Active / History), sessions, summary
 - Integration icon (`brand/`, Home Assistant 2026.3+)
